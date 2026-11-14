@@ -4,9 +4,10 @@ dist-ssr/
 *.local
 *.tsbuildinfo
 
-# The binary grid served to the browser is generated from the JSON export by
-# `npm run data`, so it is not tracked.
+# The binary grid and its metadata served to the browser are generated from
+# the JSON export by `npm run data`, so they are not tracked.
 /public/terrain/navigation_grid.bin
+/public/terrain/grid_metadata.json
 
 # Editors
 .vscode/*

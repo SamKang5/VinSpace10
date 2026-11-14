@@ -27,6 +27,9 @@ export interface MapViewerProps {
   }[];
   activeMarker: MarkerSlot;
   onMapClick: (point: GridPoint) => void;
+  /** Offscreen slope-class raster, drawn over the imagery when enabled. */
+  slopeOverlay: HTMLCanvasElement | null;
+  showSlopeClasses: boolean;
 }
 
 const MIN_ZOOM = 0.6;
@@ -39,6 +42,8 @@ export function MapViewer({
   paths,
   activeMarker,
   onMapClick,
+  slopeOverlay,
+  showSlopeClasses,
 }: MapViewerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -125,6 +130,13 @@ export function MapViewer({
     const origin = toCss(0, 0);
     ctx.drawImage(img, origin.x, origin.y, meta.width * zoom, meta.height * zoom);
 
+    // ---- slope classes -------------------------------------------------------
+    if (showSlopeClasses && slopeOverlay) {
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(slopeOverlay, origin.x, origin.y, meta.width * zoom, meta.height * zoom);
+      ctx.imageSmoothingEnabled = zoom < 2;
+    }
+
     // ---- grid lines ---------------------------------------------------------
     const cellPx = meta.pxPerCell * zoom;
     if (cellPx >= 6) {
@@ -193,7 +205,7 @@ export function MapViewer({
       ctx.textBaseline = 'middle';
       ctx.fillText(slot, x, y + 0.5);
     }
-  }, [view, size, meta, markers, paths, imageReady]);
+  }, [view, size, meta, markers, paths, imageReady, slopeOverlay, showSlopeClasses]);
 
   // ---- pointer interaction --------------------------------------------------
   const imagePointFromEvent = useCallback(

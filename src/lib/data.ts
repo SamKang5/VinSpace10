@@ -1,13 +1,18 @@
-// Loader for the M2 navigation grid, and the pixel-to-grid conversion the map
-// viewer uses (M1-04).
+// Loader for the M2-02 navigation grid and the terrain image metadata.
 //
-// The grid ships as a compact binary (see scripts/build-grid-bin.mjs) so the app
-// downloads 418 KB instead of 1.5 MB and parses it in one read. The CTX
+// The grid ships as a compact binary (see scripts/build-grid-bin.mjs) so the
+// app downloads 418 KB instead of 1.5 MB and parses it in one read. The CTX
 // orthomosaic and the grid are served from the app's own public folder, so the
 // viewer works without any network access.
+//
+// The full export is validated fail-closed at build time by the team's own
+// M2-02 loader (src/lib/navigationGrid), so a malformed or drifted export
+// fails the build. At runtime the binary is cross-checked against the
+// published grid metadata, which is small enough to ship.
 
-import type { GridPoint, NavigationGrid } from './router.ts';
 import { GRID_HEIGHT, GRID_WIDTH } from './geo.ts';
+import { parseGridMetadata, type GridMetadata } from './navigationGrid/index.ts';
+import { NODATA, slopeFromCost, type GridPoint, type RoutingGrid } from './router.ts';
 
 export interface TerrainImageMeta {
   schemaVersion: string;
@@ -29,18 +34,32 @@ export interface TerrainImageMeta {
 }
 
 export interface AppData {
-  grid: NavigationGrid;
+  /** The published grid metadata (CRS, affine, bounds, statistics, limits). */
+  metadata: GridMetadata;
+  /** The arrays the router needs, decoded from the binary. */
+  routing: RoutingGrid;
   meta: TerrainImageMeta;
 }
 
-/** Where the data lives. Kept in one place so the merge can repoint it. */
+/**
+ * Where the data lives. Kept in one place so the merge can repoint it.
+ *
+ * The optional chaining keeps this module importable from the Node check
+ * script, where `import.meta.env` does not exist.
+ */
 export const DATA_URLS = {
-  grid: './terrain/navigation_grid.bin',
-  meta: './terrain/ctx-aoi-meta.json',
+  grid: `${import.meta.env?.BASE_URL ?? './'}terrain/navigation_grid.bin`,
+  gridMetadata: `${import.meta.env?.BASE_URL ?? './'}terrain/grid_metadata.json`,
+  meta: `${import.meta.env?.BASE_URL ?? './'}terrain/ctx-aoi-meta.json`,
 } as const;
 
 /** Decode the binary grid produced by scripts/build-grid-bin.mjs. */
-export function decodeGrid(buffer: ArrayBuffer): NavigationGrid {
+export function decodeGrid(buffer: ArrayBuffer): {
+  width: number;
+  height: number;
+  cost: Float32Array;
+  mask: Uint8Array;
+} {
   const view = new DataView(buffer);
   const width = view.getUint32(0, true);
   const height = view.getUint32(4, true);
@@ -50,42 +69,79 @@ export function decodeGrid(buffer: ArrayBuffer): NavigationGrid {
   const n = width * height;
   const costOffset = 12;
   const maskOffset = costOffset + n * 4;
-  const blockedOffset = maskOffset + n;
 
-  const cost = new Array<number | null>(n);
+  const cost = new Float32Array(n);
   for (let i = 0; i < n; i += 1) {
     const v = view.getFloat32(costOffset + i * 4, true);
-    cost[i] = Number.isNaN(v) ? null : v;
+    cost[i] = Number.isNaN(v) ? NODATA : v;
   }
 
-  const validDataMask = new Array<0 | 1>(n);
-  for (let i = 0; i < n; i += 1) validDataMask[i] = view.getUint8(maskOffset + i) as 0 | 1;
+  const mask = new Uint8Array(n);
+  for (let i = 0; i < n; i += 1) mask[i] = view.getUint8(maskOffset + i);
 
-  const blockedMask = new Array<0 | 1>(n);
-  for (let i = 0; i < n; i += 1) blockedMask[i] = view.getUint8(blockedOffset + i) as 0 | 1;
-
-  return { schemaVersion: '1.0', width, height, cost, validDataMask, blockedMask };
+  // The blocked mask is not needed by the router: blocked and unknown cells
+  // both carry the NoData cost, which is exactly what the router excludes.
+  return { width, height, cost, mask };
 }
 
+/**
+ * Load everything the app needs and cross-check it against the published
+ * metadata.
+ *
+ * The counts in `grid_metadata.json` were recomputed from the export when the
+ * binary was built, so a mismatch here means the binary and the metadata
+ * disagree and the app must not route over it.
+ */
 export async function loadAppData(signal?: AbortSignal): Promise<AppData> {
-  const [gridRes, metaRes] = await Promise.all([
+  const [binRes, metaRes, gridMetadataRes] = await Promise.all([
     fetch(DATA_URLS.grid, { signal }),
     fetch(DATA_URLS.meta, { signal }),
+    fetch(DATA_URLS.gridMetadata, { signal }),
   ]);
-  if (!gridRes.ok) throw new Error(`navigation grid failed to load (${gridRes.status})`);
+  if (!binRes.ok) throw new Error(`navigation grid failed to load (${binRes.status})`);
   if (!metaRes.ok) throw new Error(`terrain metadata failed to load (${metaRes.status})`);
+  if (!gridMetadataRes.ok) {
+    throw new Error(`grid metadata failed to load (${gridMetadataRes.status})`);
+  }
 
-  const grid = decodeGrid(await gridRes.arrayBuffer());
+  const metadata = parseGridMetadata(await gridMetadataRes.json());
+  const decoded = decodeGrid(await binRes.arrayBuffer());
+
+  if (decoded.width !== GRID_WIDTH || decoded.height !== GRID_HEIGHT) {
+    throw new Error(`unexpected grid size ${decoded.width}x${decoded.height}`);
+  }
+  if (decoded.width !== metadata.width || decoded.height !== metadata.height) {
+    throw new Error(
+      `navigation grid is ${decoded.width}x${decoded.height} but the metadata declares ` +
+        `${metadata.width}x${metadata.height}`,
+    );
+  }
+
+  // The binary's cell counts must match the published statistics.
+  let traversable = 0;
+  for (let i = 0; i < decoded.cost.length; i += 1) {
+    if (decoded.cost[i] !== NODATA) traversable += 1;
+  }
+  if (traversable !== metadata.statistics.finiteCost) {
+    throw new Error(
+      `navigation grid has ${traversable} traversable cells but the metadata declares ` +
+        `${metadata.statistics.finiteCost}`,
+    );
+  }
+
   const meta = (await metaRes.json()) as TerrainImageMeta;
 
-  if (grid.width !== GRID_WIDTH || grid.height !== GRID_HEIGHT) {
-    throw new Error(`unexpected grid size ${grid.width}x${grid.height}`);
-  }
-  if (grid.cost.length !== grid.width * grid.height) {
-    throw new Error('navigation grid arrays do not match the declared size');
-  }
-
-  return { grid, meta };
+  return {
+    metadata,
+    routing: {
+      width: decoded.width,
+      height: decoded.height,
+      cost: decoded.cost,
+      slope: slopeFromCost(decoded.cost),
+      mask: decoded.mask,
+    },
+    meta,
+  };
 }
 
 /**
