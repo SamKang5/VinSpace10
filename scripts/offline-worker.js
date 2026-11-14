@@ -23,7 +23,7 @@ self.addEventListener('fetch', (event) => {
       (cache) => cache.match(new URL('./index.html', scope)),
     )));
   } else if (urls.has(request.url)) {
-    event.respondWith(caches.open(cacheName).then((cache) => cache.match(request)).then(
+    event.respondWith(caches.open(cacheName).then((cache) => cache.match(request.url)).then(
       (cached) => cached ?? fetch(request),
     ));
   }

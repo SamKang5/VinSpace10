@@ -74,13 +74,15 @@ export default function App() {
 
   useEffect(() => {
     const controller = new AbortController();
+    let imageUrl: string | null = null;
     const load = async () => {
       const nextData = await loadAppData(controller.signal);
       if (controller.signal.aborted) return;
       setLoadStatus('Decoding CTX orthomosaic…');
 
       const image = new Image();
-      image.src = import.meta.env.BASE_URL + 'terrain/' + nextData.meta.image;
+      imageUrl = URL.createObjectURL(new Blob([nextData.imageBytes], { type: 'image/png' }));
+      image.src = imageUrl;
       try {
         await image.decode();
       } catch {
@@ -95,7 +97,10 @@ export default function App() {
     load().catch((cause: unknown) => {
       if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : String(cause));
     });
-    return () => controller.abort();
+    return () => {
+      controller.abort();
+      if (imageUrl) URL.revokeObjectURL(imageUrl);
+    };
   }, [loadAttempt]);
 
   const slopeOverlay = useMemo(

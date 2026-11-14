@@ -6,11 +6,11 @@
 // viewer works without any network access.
 //
 // The full export is validated fail-closed at build time by the team's own
-// M2-02 loader (src/lib/navigationGrid), so a malformed or drifted export
-// fails the build. At runtime the binary is cross-checked against the
-// published grid metadata, which is small enough to ship.
+// M2-02 loader (src/lib/navigationGrid). At runtime the downloaded bytes are
+// checked against source-controlled hashes before parsing or routing.
 
 import { GRID_HEIGHT, GRID_WIDTH } from './geo.ts';
+import { TERRAIN_SHA256 } from './terrain-pins.ts';
 import { parseGridMetadata, type GridMetadata } from './navigationGrid/index.ts';
 import { NODATA, slopeFromCost, type GridPoint, type RoutingGrid } from './router.ts';
 
@@ -54,6 +54,7 @@ export interface OverlayMeta {
 }
 
 export interface AppData {
+  imageBytes: ArrayBuffer;
   /** The published grid metadata (CRS, affine, bounds, statistics, limits). */
   metadata: GridMetadata;
   /** The arrays the router needs, decoded from the binary. */
@@ -73,6 +74,7 @@ export interface AppData {
  * script, where `import.meta.env` does not exist.
  */
 export const DATA_URLS = {
+  image: `${import.meta.env?.BASE_URL ?? './'}terrain/ctx-jezero-aoi.png`,
   grid: `${import.meta.env?.BASE_URL ?? './'}terrain/navigation_grid.bin`,
   gridMetadata: `${import.meta.env?.BASE_URL ?? './'}terrain/grid_metadata.json`,
   meta: `${import.meta.env?.BASE_URL ?? './'}terrain/ctx-aoi-meta.json`,
@@ -112,34 +114,32 @@ export function decodeGrid(buffer: ArrayBuffer): {
   return { width, height, cost, mask };
 }
 
-/**
- * Load everything the app needs and cross-check it against the published
- * metadata.
- *
- * The counts in `grid_metadata.json` were recomputed from the export when the
- * binary was built, so a mismatch here means the binary and the metadata
- * disagree and the app must not route over it.
- */
-export async function loadAppData(signal?: AbortSignal): Promise<AppData> {
-  const [binRes, metaRes, gridMetadataRes, elevationRes, hazardRes, overlayRes] = await Promise.all([
-    fetch(DATA_URLS.grid, { signal }),
-    fetch(DATA_URLS.meta, { signal }),
-    fetch(DATA_URLS.gridMetadata, { signal }),
-    fetch(DATA_URLS.elevation, { signal }),
-    fetch(DATA_URLS.hazard, { signal }),
-    fetch(DATA_URLS.overlayMetadata, { signal }),
-  ]);
-  if (!binRes.ok) throw new Error(`navigation grid failed to load (${binRes.status})`);
-  if (!metaRes.ok) throw new Error(`terrain metadata failed to load (${metaRes.status})`);
-  if (!gridMetadataRes.ok) {
-    throw new Error(`grid metadata failed to load (${gridMetadataRes.status})`);
-  }
-  if (!elevationRes.ok) throw new Error(`elevation raster failed to load (${elevationRes.status})`);
-  if (!hazardRes.ok) throw new Error(`hazard raster failed to load (${hazardRes.status})`);
-  if (!overlayRes.ok) throw new Error(`overlay metadata failed to load (${overlayRes.status})`);
+/** Check the exact response body against the digest bundled with the app. */
+async function fetchVerified(file: keyof typeof TERRAIN_SHA256, url: string, signal?: AbortSignal): Promise<ArrayBuffer> {
+  const response = await fetch(url, { signal });
+  if (!response.ok) throw new Error(`${file} failed to load (${response.status})`);
+  const bytes = await response.arrayBuffer();
+  if (!globalThis.crypto?.subtle) throw new Error('Terrain integrity verification is unavailable.');
+  const digest = await globalThis.crypto.subtle.digest('SHA-256', bytes);
+  const actual = Array.from(new Uint8Array(digest), b => b.toString(16).padStart(2, '0')).join('');
+  if (actual !== TERRAIN_SHA256[file]) throw new Error(`Terrain integrity verification failed for ${file}.`);
+  return bytes;
+}
 
-  const metadata = parseGridMetadata(await gridMetadataRes.json());
-  const decoded = decodeGrid(await binRes.arrayBuffer());
+/** Verify every asset before decoding any routing data. */
+export async function loadAppData(signal?: AbortSignal): Promise<AppData> {
+  const [gridBytes, metaBytes, gridMetadataBytes, elevationBytes, hazardBytes, overlayBytes, imageBytes] = await Promise.all([
+    fetchVerified('navigation_grid.bin', DATA_URLS.grid, signal),
+    fetchVerified('ctx-aoi-meta.json', DATA_URLS.meta, signal),
+    fetchVerified('grid_metadata.json', DATA_URLS.gridMetadata, signal),
+    fetchVerified('elevation.bin', DATA_URLS.elevation, signal),
+    fetchVerified('hazard.bin', DATA_URLS.hazard, signal),
+    fetchVerified('overlay_metadata.json', DATA_URLS.overlayMetadata, signal),
+    fetchVerified('ctx-jezero-aoi.png', DATA_URLS.image, signal),
+  ]);
+  const json = (bytes: ArrayBuffer) => JSON.parse(new TextDecoder().decode(bytes));
+  const metadata = parseGridMetadata(json(gridMetadataBytes));
+  const decoded = decodeGrid(gridBytes);
 
   if (decoded.width !== GRID_WIDTH || decoded.height !== GRID_HEIGHT) {
     throw new Error(`unexpected grid size ${decoded.width}x${decoded.height}`);
@@ -163,13 +163,11 @@ export async function loadAppData(signal?: AbortSignal): Promise<AppData> {
     );
   }
 
-  const meta = (await metaRes.json()) as TerrainImageMeta;
-  const overlay = (await overlayRes.json()) as OverlayMeta;
+  const meta = json(metaBytes) as TerrainImageMeta;
+  const overlay = json(overlayBytes) as OverlayMeta;
 
   // The overlay rasters are the same grid frame as the navigation grid, so a
   // size mismatch means they belong to a different export.
-  const elevationBytes = await elevationRes.arrayBuffer();
-  const hazardBytes = await hazardRes.arrayBuffer();
   const cellCount = decoded.width * decoded.height;
   if (elevationBytes.byteLength !== cellCount * 4) {
     throw new Error(
@@ -200,6 +198,7 @@ export async function loadAppData(signal?: AbortSignal): Promise<AppData> {
 
   return {
     metadata,
+    imageBytes,
     routing: {
       width: decoded.width,
       height: decoded.height,
