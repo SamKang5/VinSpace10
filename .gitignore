@@ -4,9 +4,19 @@ dist-ssr/
 *.local
 *.tsbuildinfo
 
-# The binary grid served to the browser is generated from the JSON export by
-# `npm run data`, so it is not tracked.
+# Wrangler's local state and secrets.
+.wrangler/
+.dev.vars
+
+# The binary grid and its metadata served to the browser are generated from
+# the JSON export by `npm run data`, so they are not tracked.
 /public/terrain/navigation_grid.bin
+/public/terrain/grid_metadata.json
+
+# The overlay rasters are copied from Data/overlay by the same build step.
+/public/terrain/elevation.bin
+/public/terrain/hazard.bin
+/public/terrain/overlay_metadata.json
 
 # Editors
 .vscode/*

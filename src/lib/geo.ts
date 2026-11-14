@@ -16,11 +16,16 @@ export const GRID_HEIGHT = 267;
 export const GRID_ORIGIN_X = 4582523.250853;
 export const GRID_ORIGIN_Y = 1095993.140188;
 
-/** Projected metres of cell (row, col). */
+/**
+ * Projected metres of the centre of cell (row, col).
+ *
+ * The M2-03 coordinate contract puts a cell centre half a cell past its
+ * corner: `x = originX + 20 * (col + 0.5)`, `y = originY - 20 * (row + 0.5)`.
+ */
 export function cellToProjected(row: number, col: number): { x: number; y: number } {
   return {
-    x: GRID_ORIGIN_X + CELL_M * col,
-    y: GRID_ORIGIN_Y - CELL_M * row,
+    x: GRID_ORIGIN_X + CELL_M * (col + 0.5),
+    y: GRID_ORIGIN_Y - CELL_M * (row + 0.5),
   };
 }
 

@@ -1,5 +1,11 @@
 # Preserve the published dataset bytes and its SHA-256 checksums on all platforms.
 /Data/navigation/* -text
 
+# Preserve imagery package checksums across checkouts.
+/Data/imagery/* -text
+
+# The overlay rasters are binary Float32/Uint8 arrays.
+/Data/overlay/* -text
+
 # The web build of the grid is generated from the JSON export at build time.
 /public/terrain/navigation_grid.bin -text
