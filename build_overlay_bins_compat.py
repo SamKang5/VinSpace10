@@ -44,13 +44,14 @@ def main():
 
     class_counts = [0, 0, 0, 0]
     blocked_mismatch = 0
+    blocked_mask = grid.get("blockedMask", [0] * n)
     for i in range(n):
         cls = hazard[i]
         if cls <= 3:
             class_counts[cls] += 1
-        blocked_in_grid = grid.get("blockedMask", [0] * n)[i] == 1
-        if blocked_in_grid != (cls == 3):
-            blocked_mismatch += 1
+            blocked_in_grid = blocked_mask[i] == 1
+            if blocked_in_grid != (cls == 3):
+                blocked_mismatch += 1
     if blocked_mismatch > 0:
         raise SystemExit(f"hazard classes disagree with grid blocked mask on {blocked_mismatch} cells")
 

@@ -1,0 +1,86 @@
+{
+  "schemaVersion": "1.0",
+  "image": "mars_terrain.png",
+  "mimeType": "image/png",
+  "width": 1068,
+  "height": 1068,
+  "pixelFormat": "8-bit grayscale + alpha",
+  "imageOrigin": "top-left; pixel x increases east and pixel y increases south",
+  "crs": {
+    "name": "Mars 2000 sphere equirectangular",
+    "wkt": "PROJCS[\"Equirectangular Mars 2000 Sphere IAU\",GEOGCS[\"GCS_Mars_2000_Sphere\",DATUM[\"Mars_2000_(Sphere)\",SPHEROID[\"Mars_2000_Sphere_IAU\",3396190,0]],PRIMEM[\"Reference_Meridian\",0],UNIT[\"degree\",0.0174532925199433,AUTHORITY[\"EPSG\",\"9122\"]]],PROJECTION[\"Equirectangular\"],PARAMETER[\"standard_parallel_1\",0],PARAMETER[\"central_meridian\",0],PARAMETER[\"false_easting\",0],PARAMETER[\"false_northing\",0],UNIT[\"metre\",1,AUTHORITY[\"EPSG\",\"9001\"]],AXIS[\"Easting\",EAST],AXIS[\"Northing\",NORTH]]",
+    "radiusMeters": 3396190.0
+  },
+  "affine": {
+    "order": "a,b,c,d,e,f",
+    "values": [
+      5.0,
+      0.0,
+      4582523.250853,
+      0.0,
+      -5.0,
+      1095993.140188
+    ],
+    "maps": "x=a*pixelX+b*pixelY+c; y=d*pixelX+e*pixelY+f",
+    "coordinates": "continuous pixel-corner coordinates"
+  },
+  "bounds": [
+    4582523.250853,
+    1090653.140188,
+    4587863.250853,
+    1095993.140188
+  ],
+  "resolutionProjectedMeters": [
+    5,
+    5
+  ],
+  "navigationGrid": {
+    "width": 267,
+    "height": 267,
+    "pixelsPerCell": [
+      4,
+      4
+    ],
+    "cellCenterToImage": "pixelX=4*(col+0.5), pixelY=4*(row+0.5)",
+    "metadataSha256": "b2c69392590c84321f32866b025de4de4eb46b256e59f649e21722aa9e0dc3f6"
+  },
+  "source": {
+    "description": "D08 display PNG, losslessly optimized; original image created by bilinear GDAL resampling of CTX orthomosaic over M2-02 grid bounds",
+    "d08ImageSha256": "086739f4cb301dd4642c012cc4215f8a96ffe01eaca535577326960271f56f7a",
+    "ctxSourceFilename": "JEZ_ctx_B_soc_008_orthoMosaic_6m_Eqc_latTs0_lon0.tif",
+    "ctxSourceSha256": "842b457afee7c2672022b66e3f60be836c6d52e99474015bfd9ced60099b8615"
+  },
+  "routeEndpoints": [
+    {
+      "row": 230,
+      "col": 30,
+      "imageCornerCoordinates": [
+        122.0,
+        922.0
+      ],
+      "projectedCoordinates": [
+        4583133.250853,
+        1091383.140188
+      ],
+      "cost": 1.6363859176635742
+    },
+    {
+      "row": 35,
+      "col": 235,
+      "imageCornerCoordinates": [
+        942.0,
+        142.0
+      ],
+      "projectedCoordinates": [
+        4587233.250853,
+        1095283.140188
+      ],
+      "cost": 1.1645629405975342
+    }
+  ],
+  "limitations": [
+    "Research/demo only; not operational navigation or a safety product.",
+    "Numerical image/grid alignment does not verify physical CTX-to-DEM registration.",
+    "DEM vertical datum remains unresolved."
+  ]
+}

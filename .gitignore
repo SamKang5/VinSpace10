@@ -1,0 +1,68 @@
+node_modules/
+dist/
+dist-ssr/
+*.local
+*.tsbuildinfo
+
+# Wrangler's local state and secrets.
+.wrangler/
+.dev.vars
+
+# The binary grid and its metadata served to the browser are generated from
+# the JSON export by `npm run data`, so they are not tracked.
+/public/terrain/navigation_grid.bin
+/public/terrain/grid_metadata.json
+
+# The overlay rasters are copied from Data/overlay by the same build step.
+/public/terrain/elevation.bin
+/public/terrain/hazard.bin
+/public/terrain/overlay_metadata.json
+
+# Editors
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# NASA rasters and generated materials do not belong in Git.
+/data/raw/*
+/data/processed/*
+/exports/*
+/reports/*
+!/data/raw/.gitkeep
+!/data/processed/.gitkeep
+!/exports/.gitkeep
+!/reports/.gitkeep
+__pycache__/
+*.py[cod]
+.venv/
+.env
+.deps/
+
+# Local GIS sources and large processing intermediates (exported JSON stays trackable).
+*.tif
+*.tiff
+*.vrt
+*.img
+*.aux.xml
+*.ovr
+*.tfw
+*.gpkg
+*.shp
+*.shx
+*.dbf
+*.prj
+*.qix
