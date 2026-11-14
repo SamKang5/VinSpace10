@@ -42,7 +42,6 @@ export function TerrainInfoPanel({
   if (!cell) {
     return (
       <div className="terrain-info">
-        <h3 className="legend__title">Terrain info</h3>
         <p className="terrain-info__empty">Hover the map to inspect a cell.</p>
       </div>
     );
@@ -50,11 +49,7 @@ export function TerrainInfoPanel({
 
   return (
     <div className="terrain-info">
-      <h3 className="legend__title">
-        Terrain info
-        {endpoint ? <span className="terrain-info__badge">Endpoint {endpoint}</span> : null}
-      </h3>
-      <dl className="terrain-info__grid">
+      <div className="terrain-info__grid">
         <div>
           <dt>Cell</dt>
           <dd>
@@ -88,17 +83,18 @@ export function TerrainInfoPanel({
         </div>
         <div>
           <dt>Class</dt>
-          <dd className={blocked ? 'is-blocked' : undefined}>{slopeClass ?? '—'}</dd>
+          <dd className={blocked ? 'is-blocked' : undefined}>
+            {slopeClass ?? '—'}
+            {endpoint ? <span className="terrain-info__badge">End {endpoint}</span> : null}
+          </dd>
         </div>
-      </dl>
+      </div>
       {blocked ? (
         <p className="terrain-info__note terrain-info__note--blocked">
           Excluded from routing: the slope is 15° or more.
         </p>
       ) : (
-        <p className="terrain-info__note">
-          Friction is a dimensionless slope-derived index, not energy or speed.
-        </p>
+        <p className="terrain-info__note">Friction is a slope-derived index, not energy or speed.</p>
       )}
     </div>
   );

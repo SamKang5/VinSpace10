@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { GridPoint } from '../lib/router';
 import type { TerrainImageMeta } from '../lib/data';
 import { imagePixelToGrid, gridToImagePixel } from '../lib/data';
+import { MARKER_COLOR } from '../lib/theme';
 
 export type MarkerSlot = 'A' | 'B';
 
@@ -24,6 +25,8 @@ export interface MapViewerProps {
     color: string;
     /** The selected mode draws on top; the others recede but stay visible. */
     active: boolean;
+    /** Dashed, so overlapping routes stay distinguishable. */
+    dashed: boolean;
   }[];
   activeMarker: MarkerSlot;
   onMapClick: (point: GridPoint) => void;
@@ -59,6 +62,7 @@ export function MapViewer({
   const [imageReady, setImageReady] = useState(false);
   const [view, setView] = useState<ViewState>({ cx: meta.width / 2, cy: meta.height / 2, zoom: 2 });
   const [size, setSize] = useState({ w: 0, h: 0 });
+  const [panning, setPanning] = useState(false);
   const dragRef = useRef<{ x: number; y: number; cx: number; cy: number } | null>(null);
   const movedRef = useRef(false);
   // True once the user pans or zooms, so a resize must not override their view.
@@ -170,7 +174,10 @@ export function MapViewer({
     }
 
     // ---- routes -------------------------------------------------------------
-    for (const path of paths) {
+    // The active route draws last, so it sits on top of the other one.
+    const ordered = [...paths].sort((a, b) => Number(a.active) - Number(b.active));
+
+    for (const path of ordered) {
       if (path.points.length === 0) continue;
       const pts = path.points.map((p) => {
         const ip = gridToImagePixel(meta, p);
@@ -179,20 +186,25 @@ export function MapViewer({
 
       ctx.lineJoin = 'round';
       ctx.lineCap = 'round';
-      ctx.globalAlpha = path.active ? 1 : 0.45;
-      ctx.strokeStyle = 'rgba(0, 0, 0, 0.55)';
-      ctx.lineWidth = path.active ? 6 : 4;
+      ctx.globalAlpha = path.active ? 1 : 0.6;
+
+      // A dark casing under the line keeps it readable over bright terrain.
+      ctx.setLineDash([]);
+      ctx.strokeStyle = 'rgba(10, 8, 7, 0.7)';
+      ctx.lineWidth = path.active ? 7 : 5;
       ctx.beginPath();
       ctx.moveTo(pts[0].x, pts[0].y);
       for (let i = 1; i < pts.length; i += 1) ctx.lineTo(pts[i].x, pts[i].y);
       ctx.stroke();
 
+      ctx.setLineDash(path.dashed ? [9, 6] : []);
       ctx.strokeStyle = path.color;
       ctx.lineWidth = path.active ? 3.5 : 2;
       ctx.beginPath();
       ctx.moveTo(pts[0].x, pts[0].y);
       for (let i = 1; i < pts.length; i += 1) ctx.lineTo(pts[i].x, pts[i].y);
       ctx.stroke();
+      ctx.setLineDash([]);
       ctx.globalAlpha = 1;
     }
 
@@ -206,7 +218,7 @@ export function MapViewer({
 
       ctx.beginPath();
       ctx.arc(x, y, 13, 0, Math.PI * 2);
-      ctx.fillStyle = slot === 'A' ? '#38bdf8' : '#fb923c';
+      ctx.fillStyle = MARKER_COLOR[slot];
       ctx.fill();
       ctx.lineWidth = 3;
       ctx.strokeStyle = 'rgba(0, 0, 0, 0.6)';
@@ -254,6 +266,7 @@ export function MapViewer({
     const dx = e.clientX - drag.x;
     const dy = e.clientY - drag.y;
     if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
+      if (!movedRef.current) setPanning(true);
       movedRef.current = true;
       userAdjustedRef.current = true;
     }
@@ -267,6 +280,7 @@ export function MapViewer({
   const handlePointerUp = (e: React.PointerEvent<HTMLCanvasElement>) => {
     const wasDrag = movedRef.current;
     dragRef.current = null;
+    setPanning(false);
     if (wasDrag) return;
 
     // A click places the active marker.
@@ -292,13 +306,6 @@ export function MapViewer({
     });
   };
 
-  const fitToView = useCallback(() => {
-    if (size.w === 0 || size.h === 0) return;
-    userAdjustedRef.current = true;
-    const zoom = Math.min(size.w / meta.width, size.h / meta.height);
-    setView(clampView({ cx: meta.width / 2, cy: meta.height / 2, zoom }));
-  }, [meta, size, clampView]);
-
   /** Fill the frame with terrain, cropping the AOI edges rather than letterboxing. */
   const coverView = useCallback(() => {
     if (size.w === 0 || size.h === 0) return;
@@ -321,15 +328,26 @@ export function MapViewer({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [imageReady, meta]);
 
-  const cursor = dragRef.current ? 'grabbing' : 'crosshair';
   const markerLabel = useMemo(() => (activeMarker === 'A' ? 'Start (A)' : 'End (B)'), [activeMarker]);
 
+  // The scale bar reads the map's own ground: the largest round number of
+  // metres that still fits a sensible width at the current zoom.
+  const scale = useMemo(() => {
+    const metresPerCssPx = meta.metersPerPx / view.zoom;
+    if (!Number.isFinite(metresPerCssPx) || metresPerCssPx <= 0) return null;
+    const targets = [10, 20, 50, 100, 200, 500, 1000, 2000, 5000];
+    const maxWidth = 130;
+    const fits = targets.filter((m) => m / metresPerCssPx <= maxWidth);
+    const best = fits.length ? fits[fits.length - 1] : targets[0];
+    return { metres: best, px: Math.round(best / metresPerCssPx) };
+  }, [meta.metersPerPx, view.zoom]);
+
   return (
-    <div className="map" ref={wrapRef}>
+    <div className={`map ${panning ? 'is-panning' : ''}`} ref={wrapRef}>
       <canvas
         ref={canvasRef}
         className="map__canvas"
-        style={{ width: '100%', height: '100%', cursor, touchAction: 'none' }}
+        style={{ width: '100%', height: '100%', touchAction: 'none' }}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
@@ -339,23 +357,33 @@ export function MapViewer({
         aria-label="Mars terrain map. Drag to pan, scroll to zoom, click to place the selected marker."
       />
       {!imageReady && <div className="map__loading">Loading Jezero terrain…</div>}
-      <div className="map__hint">Click to place {markerLabel}</div>
       <ul className="map__legend" aria-label="Map legend">
         <li>
-          <span className="map__swatch" style={{ background: '#38bdf8' }} aria-hidden="true" />
+          <span className="map__swatch" style={{ background: MARKER_COLOR.A }} aria-hidden="true" />
           Start (A)
         </li>
         <li>
-          <span className="map__swatch" style={{ background: '#fb923c' }} aria-hidden="true" />
+          <span className="map__swatch" style={{ background: MARKER_COLOR.B }} aria-hidden="true" />
           End (B)
         </li>
         {paths.map((p) => (
           <li key={p.id} className={p.active ? 'is-active' : ''}>
-            <span className="map__swatch map__swatch--line" style={{ background: p.color }} aria-hidden="true" />
+            <span
+              className={`map__swatch map__swatch--line ${p.dashed ? 'is-dashed' : ''}`}
+              style={{ background: p.color }}
+              aria-hidden="true"
+            />
             {p.label}
           </li>
         ))}
+        <li className="map__hint">Click to place {markerLabel}</li>
       </ul>
+      {scale && (
+        <div className="map__scale" aria-hidden="true">
+          <span className="map__scale-bar" style={{ width: `${scale.px}px` }} />
+          <span>{scale.metres >= 1000 ? `${scale.metres / 1000} km` : `${scale.metres} m`}</span>
+        </div>
+      )}
       <div className="map__zoom">
         <button type="button" onClick={() => zoomBy(1.35)} aria-label="Zoom in">
           +
@@ -363,11 +391,8 @@ export function MapViewer({
         <button type="button" onClick={() => zoomBy(1 / 1.35)} aria-label="Zoom out">
           −
         </button>
-        <button type="button" onClick={fitToView} aria-label="Fit the whole AOI in view">
-          ⤢
-        </button>
         <button type="button" onClick={coverView} aria-label="Fill the view with terrain">
-          ▣
+          ⤢
         </button>
       </div>
     </div>

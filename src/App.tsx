@@ -5,6 +5,7 @@ import { RouteComparison } from './components/RouteComparison';
 import { MapLegend } from './components/MapLegend';
 import { TerrainInfoPanel } from './components/TerrainInfoPanel';
 import { HowToModal } from './components/HowToModal';
+import { Block } from './components/Block';
 import { loadAppData, type AppData } from './lib/data';
 import {
   buildElevationOverlay,
@@ -15,20 +16,11 @@ import {
 } from './lib/overlay';
 import { cellToProjected } from './lib/geo';
 import { NODATA, route, type GridPoint, type RouteMode, type RouteResult } from './lib/router';
+import { MODE_COLOR, MODE_DASHED, MODE_LABEL } from './lib/theme';
 
 /** The D08 example pair: a long traverse across the western fan. */
 const EXAMPLE_START: GridPoint = [230, 30];
 const EXAMPLE_END: GridPoint = [35, 235];
-
-const MODE_COLOR: Record<RouteMode, string> = {
-  shortest: '#38bdf8',
-  'terrain-aware': '#fbbf24',
-};
-
-const MODE_LABEL: Record<RouteMode, string> = {
-  shortest: 'Shortest path',
-  'terrain-aware': 'Terrain-aware path',
-};
 
 /** The legend swatches, in class order. */
 const LEGEND_CLASS_COLORS = [
@@ -153,10 +145,17 @@ export default function App() {
           points: result.path,
           color: MODE_COLOR[m],
           active: m === mode,
+          dashed: MODE_DASHED[m],
         };
       })
       .filter((p): p is NonNullable<typeof p> => p !== null);
   }, [results, mode]);
+
+  // The markers must keep their identity, or every render redraws the canvas.
+  const markers = useMemo(
+    () => ({ A: start ?? undefined, B: end ?? undefined }),
+    [start, end],
+  );
 
   // ---- render --------------------------------------------------------------
   if (error) {
@@ -179,13 +178,18 @@ export default function App() {
 
   return (
     <div className="app">
+      <a className="skip-link" href="#main">
+        Skip to content
+      </a>
       <header className="app__head">
-        <div>
-          <h1 className="app__title">
-            MARS <b>NAVIGATOR</b>
-          </h1>
-          <p className="app__sub">Jezero crater · western fan · route research prototype</p>
+        <div className="app__brand">
+          <h1 className="app__title">MARS NAVIGATOR</h1>
+          <span className="app__dot" aria-hidden="true">
+            ·
+          </span>
+          <p className="app__sub">Jezero crater western fan</p>
         </div>
+        <div className="app__head-spacer" />
         <dl className="app__stats">
           <div>
             <dt>Grid</dt>
@@ -199,24 +203,26 @@ export default function App() {
           </div>
           <div>
             <dt>Blocked</dt>
-            <dd>{metadata.statistics.blocked}</dd>
+            <dd>{metadata.statistics.blocked.toLocaleString()}</dd>
           </div>
           <div>
             <dt>CRS</dt>
             <dd>Mars 2000</dd>
           </div>
-          <button type="button" className="btn btn--ghost" onClick={() => setHowToOpen(true)}>
-            How to use
-          </button>
         </dl>
+        <button type="button" className="btn btn--ghost btn--sm" onClick={() => setHowToOpen(true)}>
+          How to use
+        </button>
       </header>
 
-      <main className="app__body">
-        <section className="app__map">
+      <main className="app__body" id="main" tabIndex={-1}>
+        {/* A div, not a section: the kit styles `main > section` as a full-height
+            page section, which would size the map to the viewport height. */}
+        <div className="app__map">
           <MapViewer
             meta={data.meta}
             imageUrl={`${import.meta.env.BASE_URL}terrain/${data.meta.image}`}
-            markers={{ A: start ?? undefined, B: end ?? undefined }}
+            markers={markers}
             paths={paths}
             activeMarker={activeMarker}
             onMapClick={handleMapClick}
@@ -226,11 +232,10 @@ export default function App() {
             showSlopeClasses={showSlopeClasses}
             showElevation={showElevation}
           />
-        </section>
+        </div>
 
-        <aside className="app__panel">
-          <div className="panel__block">
-            <h2 className="panel__heading">01 · Route endpoints</h2>
+        <aside className="app__rail" aria-label="Route tools">
+          <Block title="Route endpoints" defaultOpen>
             <ControlPanel
               start={start}
               end={end}
@@ -247,14 +252,13 @@ export default function App() {
               onShowElevationChange={setShowElevation}
               canCalculate={Boolean(start && end)}
             />
-          </div>
+          </Block>
 
-          <div className="panel__block" data-m4-slot="route-comparison-cards">
-            <h2 className="panel__heading">02 · Comparison</h2>
+          <Block title="Comparison" defaultOpen>
             <RouteComparison results={results} activeMode={mode} onSelectMode={setMode} />
-          </div>
+          </Block>
 
-          <div className="panel__block" data-r03-slot="terrain-info">
+          <Block title="Terrain info" defaultOpen>
             <TerrainInfoPanel
               cell={hoveredInfo?.cell ?? null}
               projected={hoveredInfo?.projected ?? null}
@@ -265,9 +269,9 @@ export default function App() {
               blocked={hoveredInfo?.blocked ?? false}
               endpoint={hoveredInfo?.endpoint ?? null}
             />
-          </div>
+          </Block>
 
-          <div className="panel__block" data-r01-slot="map-legend">
+          <Block title="Legend">
             <MapLegend
               elevation={{
                 min: data.overlay.elevation.min,
@@ -278,25 +282,26 @@ export default function App() {
                 label: SLOPE_CLASS_LABELS[(i + 1) as SlopeClass],
                 color,
               }))}
-              costPolicy="Friction index = 1 + (slope ÷ 10)². The terrain-aware route minimises distance weighted by this index."
+              costPolicy="Friction = 1 + (slope ÷ 10)². The terrain-aware route minimises distance weighted by this index."
               traversability={{
                 traversable: metadata.statistics.finiteCost,
                 blocked: metadata.statistics.blocked,
                 total: metadata.statistics.total,
               }}
             />
-          </div>
+          </Block>
+
+          <section className="block">
+            <div className="block__body">
+              <p className="panel__note">
+                Research prototype. Friction is a dimensionless slope-derived index
+                (1 + (slope/10)²), not energy, speed or safety. Cells at 15° or more are
+                excluded from routing in both modes.
+              </p>
+            </div>
+          </section>
         </aside>
       </main>
-
-      <footer className="app__foot">
-        <p>
-          Research prototype. Friction is a dimensionless slope-derived index
-          (1 + (slope/10)²), not energy, speed or safety. Cells at 15° or more are
-          excluded from routing in both modes. Routes do not establish real
-          traversability.
-        </p>
-      </footer>
 
       <HowToModal open={howToOpen} onClose={() => setHowToOpen(false)} />
     </div>
