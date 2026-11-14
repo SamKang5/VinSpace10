@@ -4,6 +4,10 @@ dist-ssr/
 *.local
 *.tsbuildinfo
 
+# Wrangler's local state and secrets.
+.wrangler/
+.dev.vars
+
 # The binary grid and its metadata served to the browser are generated from
 # the JSON export by `npm run data`, so they are not tracked.
 /public/terrain/navigation_grid.bin
