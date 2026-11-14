@@ -1,6 +1,6 @@
 # M2-05 — Publication-fix verification
 
-**Status: CONDITIONAL for team integration; data package checks PASS.** Verified on 2026-11-14 against the files in this isolated worktree and the existing M1 checkout. The local branch and commit are prepared for review; nothing was pushed or merged by this task.
+**Status: CONDITIONAL for team integration; data package checks PASS.** The checks below are historical results from 2026-11-14 against the isolated worktree and the M1 checkout. At the time of those checks the branch was local; it was subsequently published for review. No merge to main is claimed.
 
 ## Integrity and contract
 
@@ -20,7 +20,7 @@
 
 The USGS product record instructs “Please cite authors”; the older local XML lists use constraints None. The data-release citation has five creators, the local XML six originators and the product page a separate nine-author conference reference; these lists are not interchangeable. The independent review reports live DOI and product access on 2026-11-14 and publisher-hosted CTX/DTM re-download hashes matching `842b457afee7c2672022b66e3f60be836c6d52e99474015bfd9ced60099b8615` and `16a1aa66c3f48c1bca252795827db7b417876217aff0f5e1aff18027fab2327b`. No official publisher checksum manifest or separate license grant was found; the original retrieval date remains unverified. NASA/USGS endorsement is not implied.
 
-The published navigation branch is `data/m2-02-export`; the published M1 loader branch `m1-02-navigation-grid-loader` points to `1903782d4203c41e34d4ba2f1de55f39f23313b2` and descends from the data branch. The M2-04/M2-05 review branch is published at the previously verified `6fce4da1a0cb5b6260f973cf7e5a80dd3a44af0e`; subsequent corrections are in this branch history. M1/M5 must serve the PNG and metadata, implement real viewport and click integration, test route rendering and no-path handling, and agree how the reviewed branches are shared. The standalone M2-03 report remains absent; the coordinate contract is in the handoff.
+The published navigation branch is `data/m2-02-export`; the published M1 loader branch `m1-02-navigation-grid-loader` points to `1903782d4203c41e34d4ba2f1de55f39f23313b2` and descends from the data branch. The M2-04/M2-05 review branch is published; its verified head before this release-note cleanup was `f7c2edafe4cab5d22f4cbd336895fe79c5072a0b`. The standalone [M2-03 coordinate report](M2_03_coordinate_contract.md) is published on that branch. M1/M5 must serve the PNG and metadata, implement real viewport and click integration, test route rendering and no-path handling, and coordinate review of the branches.
 
 Independent physical CTX/DEM registration and the DEM vertical datum remain unresolved; slope and friction policies are research assumptions. Nothing in this package validates astronaut or rover safety or real-world traversability.
 
