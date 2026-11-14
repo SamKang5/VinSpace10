@@ -30,12 +30,12 @@ export function MapLegend({
 
   return (
     <div className="legend">
-      <section className="legend__group">
-        <h4 className="legend__label">Basemap</h4>
-        <p className="legend__text">
-          CTX orthomosaic, 6&nbsp;m/px, NASA/USGS Jezero crater western fan.
-        </p>
-      </section>
+        <section className="legend__group">
+          <h4 className="legend__label">Basemap</h4>
+          <p className="legend__text">
+            CTX orthomosaic, 6&nbsp;m/px, Jezero crater western fan.
+          </p>
+        </section>
 
       <section className="legend__group">
         <h4 className="legend__label">Elevation</h4>
@@ -58,19 +58,19 @@ export function MapLegend({
         </ul>
       </section>
 
-      <section className="legend__group">
-        <h4 className="legend__label">Movement cost</h4>
-        <p className="legend__text">{costPolicy}</p>
-      </section>
+        <section className="legend__group">
+          <h4 className="legend__label">Movement cost</h4>
+          <p className="legend__text">{costPolicy}</p>
+        </section>
 
-      <section className="legend__group">
-        <h4 className="legend__label">Traversability</h4>
-        <p className="legend__text">
-          {traversability.traversable.toLocaleString()} of{' '}
-          {traversability.total.toLocaleString()} cells open for routing;{' '}
-          {traversability.blocked.toLocaleString()} blocked ({blockedPct}%).
-        </p>
-      </section>
+        <section className="legend__group">
+          <h4 className="legend__label">Traversability</h4>
+          <p className="legend__text">
+            {traversability.traversable.toLocaleString()} of{' '}
+            {traversability.total.toLocaleString()} cells open;{' '}
+            {traversability.blocked.toLocaleString()} blocked ({blockedPct}%).
+          </p>
+        </section>
     </div>
   );
 }

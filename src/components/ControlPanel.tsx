@@ -72,9 +72,7 @@ export function ControlPanel({
         })}
       </div>
 
-      <p className="panel__note">
-        Pick a marker, then click the map to place it. Drag to pan, scroll to zoom.
-      </p>
+      <p className="panel__note">Pick a marker, then click the map to place it.</p>
 
       <div className="panel__row">
         <button type="button" className="btn btn--ghost btn--sm" onClick={onUseExample}>

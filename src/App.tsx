@@ -178,11 +178,15 @@ export default function App() {
 
   return (
     <div className="app">
+      <a className="skip-link" href="#main">
+        Skip to content
+      </a>
       <header className="app__head">
         <div className="app__brand">
-          <h1 className="app__title">
-            MARS <b>NAVIGATOR</b>
-          </h1>
+          <h1 className="app__title">MARS NAVIGATOR</h1>
+          <span className="app__dot" aria-hidden="true">
+            ·
+          </span>
           <p className="app__sub">Jezero crater western fan</p>
         </div>
         <div className="app__head-spacer" />
@@ -211,7 +215,7 @@ export default function App() {
         </button>
       </header>
 
-      <main className="app__body">
+      <main className="app__body" id="main" tabIndex={-1}>
         {/* A div, not a section: the kit styles `main > section` as a full-height
             page section, which would size the map to the viewport height. */}
         <div className="app__map">
@@ -278,7 +282,7 @@ export default function App() {
                 label: SLOPE_CLASS_LABELS[(i + 1) as SlopeClass],
                 color,
               }))}
-              costPolicy="Friction index = 1 + (slope ÷ 10)². The terrain-aware route minimises distance weighted by this index."
+              costPolicy="Friction = 1 + (slope ÷ 10)². The terrain-aware route minimises distance weighted by this index."
               traversability={{
                 traversable: metadata.statistics.finiteCost,
                 blocked: metadata.statistics.blocked,
@@ -292,8 +296,7 @@ export default function App() {
               <p className="panel__note">
                 Research prototype. Friction is a dimensionless slope-derived index
                 (1 + (slope/10)²), not energy, speed or safety. Cells at 15° or more are
-                excluded from routing in both modes. Routes do not establish real
-                traversability.
+                excluded from routing in both modes.
               </p>
             </div>
           </section>

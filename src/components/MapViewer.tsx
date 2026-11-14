@@ -306,13 +306,6 @@ export function MapViewer({
     });
   };
 
-  const fitToView = useCallback(() => {
-    if (size.w === 0 || size.h === 0) return;
-    userAdjustedRef.current = true;
-    const zoom = Math.min(size.w / meta.width, size.h / meta.height);
-    setView(clampView({ cx: meta.width / 2, cy: meta.height / 2, zoom }));
-  }, [meta, size, clampView]);
-
   /** Fill the frame with terrain, cropping the AOI edges rather than letterboxing. */
   const coverView = useCallback(() => {
     if (size.w === 0 || size.h === 0) return;
@@ -364,7 +357,6 @@ export function MapViewer({
         aria-label="Mars terrain map. Drag to pan, scroll to zoom, click to place the selected marker."
       />
       {!imageReady && <div className="map__loading">Loading Jezero terrain…</div>}
-      <div className="map__hint">Click to place {markerLabel}</div>
       <ul className="map__legend" aria-label="Map legend">
         <li>
           <span className="map__swatch" style={{ background: MARKER_COLOR.A }} aria-hidden="true" />
@@ -384,6 +376,7 @@ export function MapViewer({
             {p.label}
           </li>
         ))}
+        <li className="map__hint">Click to place {markerLabel}</li>
       </ul>
       {scale && (
         <div className="map__scale" aria-hidden="true">
@@ -398,11 +391,8 @@ export function MapViewer({
         <button type="button" onClick={() => zoomBy(1 / 1.35)} aria-label="Zoom out">
           −
         </button>
-        <button type="button" onClick={fitToView} aria-label="Fit the whole AOI in view">
-          ⤢
-        </button>
         <button type="button" onClick={coverView} aria-label="Fill the view with terrain">
-          ▣
+          ⤢
         </button>
       </div>
     </div>

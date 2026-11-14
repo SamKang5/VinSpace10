@@ -94,9 +94,7 @@ export function TerrainInfoPanel({
           Excluded from routing: the slope is 15° or more.
         </p>
       ) : (
-        <p className="terrain-info__note">
-          Friction is a dimensionless slope-derived index, not energy or speed.
-        </p>
+        <p className="terrain-info__note">Friction is a slope-derived index, not energy or speed.</p>
       )}
     </div>
   );

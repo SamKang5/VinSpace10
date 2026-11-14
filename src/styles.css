@@ -89,17 +89,20 @@ body {
   min-width: 0;
 }
 
+/* A full stop between the name and the subtitle, so the heading does not
+   read as one run-on sentence. */
+.app__dot {
+  color: var(--muted);
+  font-size: 15px;
+}
+
 .app__title {
   margin: 0;
   font-size: 15px;
   font-weight: 600;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
   white-space: nowrap;
-}
-
-.app__title b {
-  font-weight: 600;
-  color: var(--accent);
 }
 
 .app__sub {
@@ -198,19 +201,14 @@ body {
   cursor: crosshair;
 }
 
-/* The hint sits at the bottom left, over the map, out of the way. */
+/* The hint is the last line of the map legend, so it never sits over the
+   canvas on its own. */
 .map__hint {
-  position: absolute;
-  left: var(--s-4);
-  bottom: var(--s-4);
-  padding: 6px 11px;
-  border-radius: 999px;
-  background: rgba(13, 11, 10, 0.82);
-  border: 1px solid var(--line);
-  font-size: 12px;
+  margin: 2px 0 0;
+  padding-top: 6px;
+  border-top: 1px solid var(--line);
   color: var(--muted);
-  pointer-events: none;
-  backdrop-filter: blur(6px);
+  font-size: 11px;
 }
 
 .map__legend {
@@ -949,6 +947,30 @@ body {
     border-left: 0;
     border-top: 1px solid var(--line);
     overflow: visible;
+  }
+
+  /* A phone needs a 44px target for every control. */
+  .map__zoom button {
+    width: 44px;
+    height: 44px;
+  }
+
+  .chip,
+  .mode {
+    min-height: 44px;
+  }
+
+  .toggle {
+    min-height: 44px;
+  }
+
+  .toggle input {
+    width: 20px;
+    height: 20px;
+  }
+
+  .block__head {
+    min-height: 44px;
   }
 }
 
