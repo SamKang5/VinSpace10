@@ -4,6 +4,10 @@ dist-ssr/
 *.local
 *.tsbuildinfo
 
+# The binary grid served to the browser is generated from the JSON export by
+# `npm run data`, so it is not tracked.
+/public/terrain/navigation_grid.bin
+
 # Editors
 .vscode/*
 !.vscode/extensions.json
@@ -22,3 +26,33 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
+
+# NASA rasters and generated materials do not belong in Git.
+/data/raw/*
+/data/processed/*
+/exports/*
+/reports/*
+!/data/raw/.gitkeep
+!/data/processed/.gitkeep
+!/exports/.gitkeep
+!/reports/.gitkeep
+__pycache__/
+*.py[cod]
+.venv/
+.env
+.deps/
+
+# Local GIS sources and large processing intermediates (exported JSON stays trackable).
+*.tif
+*.tiff
+*.vrt
+*.img
+*.aux.xml
+*.ovr
+*.tfw
+*.gpkg
+*.shp
+*.shx
+*.dbf
+*.prj
+*.qix
