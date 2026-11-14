@@ -1,5 +1,7 @@
 # MARS NAVIGATOR — 30-second demo script (M4-07)
 
+**Live URL: https://mars-navigator.pages.dev/**
+
 Target: 30 seconds of screen time, spoken track provided.
 
 ## Setup before the demo

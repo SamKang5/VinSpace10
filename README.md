@@ -10,6 +10,8 @@ terrain data for the Western Fan, Jezero Crater.
 - React 18 + TypeScript
 - Vite 5 (dev server and build)
 
+**Live: <https://mars-navigator.pages.dev/>**
+
 ## Getting started
 
 Requires Node.js 20 or newer.
@@ -37,8 +39,8 @@ npm run preview
 | `npm run build` | Build the web grid, type-check, and build the production bundle into `dist/` |
 | `npm run preview` | Serve the built bundle locally |
 | `npm run typecheck` | Run the TypeScript compiler without emitting files |
-| `npm run check` | Run the routing and coordinate self-checks |
-| `npm run data` | Regenerate `public/terrain/navigation_grid.bin` from the M2-02 export |
+| `npm run check` | Run the routing and coordinate self-checks, and the unit tests |
+| `npm run data` | Regenerate the browser grid and overlay assets from the published exports |
 
 ## Branches
 
@@ -101,9 +103,34 @@ frictions, and the heuristic is the great-circle distance to the goal times the
 minimum friction of 1, which keeps it admissible. Diagonal corner cutting is
 refused, and blocked or unknown cells are never entered.
 
-`shortcut:` the search lives here because M1-05, M3-06 and M3-07 cannot be
-completed without it. M5's M3-03/M3-04 engine supersedes this at merge time;
-the exported signature is kept stable so the swap is a one-file change.
+The engine is a port of the team's own D08 prototype
+(`02_Processed_GIS/D08_AStar_Routing/public/routing.js` in the NASA data
+archive), so the app and the source pipeline agree by construction. The app
+reproduces the D08 published example exactly: 207 cells at modelled cost
+8113.5 for the shortest mode and 246 cells at 7261.5 for the terrain-aware mode.
+
+`tests/routing.test.ts` holds the D08 test suite, ported to TypeScript: sample
+grids, blocked cells, diagonal corner cuts, unreachable goals, same-point
+routes, and a comparison against an independent Dijkstra oracle that shares no
+code with the router.
+
+### Overlay rasters (M2-06)
+
+`Data/overlay/` holds the D07 elevation and hazard rasters, copied byte-for-byte
+from the NASA archive. `npm run data` copies them into `public/terrain` and
+writes `overlay_metadata.json`; the build fails if the rasters drift from the
+navigation grid or if the hazard classes disagree with the blocked mask.
+
+### Deployment
+
+The app is a static bundle and is deployed to Cloudflare Pages.
+
+```bash
+npm run build
+npx wrangler pages deploy dist --project-name mars-navigator
+```
+
+Live at <https://mars-navigator.pages.dev/>.
 
 ## Limitations
 

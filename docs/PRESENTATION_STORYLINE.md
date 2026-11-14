@@ -1,5 +1,7 @@
 # MARS NAVIGATOR — presentation storyline (M4-06)
 
+**Live URL: https://mars-navigator.pages.dev/**
+
 Five slides, 30 seconds of demo inside them. See `docs/DEMO_SCRIPT.md` for the
 click-by-click run sheet.
 
