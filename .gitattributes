@@ -1,2 +1,4 @@
 # Preserve the published dataset bytes and its SHA-256 checksums on all platforms.
 /Data/navigation/* -text
+# Same bytes are served as frontend assets; never line-ending-normalize them.
+/frontend/public/data/** -text
