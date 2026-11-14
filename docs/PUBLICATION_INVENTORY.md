@@ -12,17 +12,9 @@ Status: **review branch published; M2-05 final sign-off pending**. This inventor
 
 The M2-03 coordinate report in `docs/M2_03_coordinate_contract.md` was regenerated against the D07 cost raster and the published navigation grid: 71,289 cost positions and 1,009 sample centre round trips passed. The report is source-dependent; its validator is not included in this branch. Both package manifests passed four payload hashes each; the imagery and grid metadata match on CRS and bounds. The package provides no evidence that the actual frontend image overlay or router is integrated.
 
-## C — Documentation corrections required before final sign-off
+## C — Attribution corrections
 
-The independent M2-05 review identifies five open attribution findings. They have **not** been corrected by publication:
-
-1. The README's local-XML `useconst=None` needs reconciliation with the independently observed live USGS product record, which says **“Please cite authors”**; preserve the discrepancy and cite authors.
-2. Update the historical live-access failure wording to reflect the review's subsequent 2026-11-14 successful product/DOI access.
-3. Correct the product title to the independently observed DOI title or explicitly label the source XML's literal title.
-4. Reconcile the six local XML originators with the five DOI creators; avoid presenting the XML list as the definitive DOI citation.
-5. Clarify that the review reports 2026-11-14 publisher-hosted CTX and DTM re-downloads matched local hashes, while no official published checksum manifest was found.
-
-These observations are recorded in the independently authored local `reviews/M2_05_final_independent_review.md`. They require source-evidence verification and a separate documentation/rebuild/checksum update; the original retrieval date and separate license grant remain unverified. Also update `Data/README.md` to list the imagery package. Do not represent NASA/USGS as endorsing the prototype.
+The five independent-review findings are corrected in the imagery README and handoff: current citation instruction versus older XML, subsequent live-access evidence, product title, distinct author lists, and independent publisher-hosted re-download hash matches. No official publisher checksum manifest, original local retrieval date or separate license grant was established. Cite the source authors. Integration and scientific limitations remain open.
 
 ## D — Keep outside Git until a storage plan exists
 
@@ -34,4 +26,4 @@ Untracked or staged work in the shared workspace belongs to concurrent agents an
 
 ## Merge readiness
 
-Review the imagery branch against its actual base `data/m2-02-export`; resolve the five attribution findings, regenerate and verify the imagery manifest if the README changes, and review license and retrieval-date evidence. Then coordinate integration of the navigation/data branches with the frontend and test asset serving, pan/zoom click mapping, blocked/unknown/out-of-bounds handling and routing. Numerical metadata alignment does not validate physical CTX-to-DEM registration; DEM vertical datum, prototype slope/friction assumptions and real-world safety remain unresolved.
+Review the imagery branch against its actual base `data/m2-02-export`; review the corrected attribution and imagery manifest, and resolve license and original retrieval-date evidence. Then coordinate integration of the navigation/data branches with the frontend and test asset serving, pan/zoom click mapping, blocked/unknown/out-of-bounds handling and routing. Numerical metadata alignment does not validate physical CTX-to-DEM registration; DEM vertical datum, prototype slope/friction assumptions and real-world safety remain unresolved.

@@ -56,11 +56,11 @@ The M2-04 image uses the same CRS and outer bounds as the grid. Its pixel-corner
 
 Both endpoints are supported, unblocked and finite-cost. The prior D08 example route file, available locally at `D:\Nasa_Data\D08_AStar_Routing\examples\route_comparison.json`, has connected shortest and terrain-weighted paths; both were rechecked against M2-02 in the preceding handoff. Endpoint validity is not proof that a newly integrated router finds the same path.
 
-The publication is a review branch. Five attribution findings remain open; see the [publication inventory](PUBLICATION_INVENTORY.md) before final sign-off.
+The publication is a review branch. The five attribution findings are corrected; see the [publication inventory](PUBLICATION_INVENTORY.md). Frontend integration remains separate.
 
 ## Imagery attribution
 
-Source: USGS Astrogeology Science Center, *Context Camera Orthorectifiedimage Mosaic for Mars 2020 Terrain Relative Navigation* (Fergason et al., 2020), from the CTX instrument on NASA Mars Reconnaissance Orbiter. [USGS DOI](https://doi.org/10.5066/P9GV1ND3) and [product record](https://astrogeology.usgs.gov/search/map/Mars/Mars2020/JEZ_ctx_B_soc_008_orthoMosaic_6m_Eqc_latTs0_lon0). The source filenames and SHA-256 hashes, source XML, local terms evidence and unverified retrieval date are documented in `Data/imagery/README.md`. NASA/USGS do not endorse this prototype.
+Source: USGS Astrogeology Science Center, *Mars 2020 Terrain Relative Navigation Context Camera Orthorectified Image Mosaic* (Fergason et al., 2020), from the CTX instrument on NASA Mars Reconnaissance Orbiter. [USGS DOI](https://doi.org/10.5066/P9GV1ND3) and [product record](https://astrogeology.usgs.gov/search/map/Mars/Mars2020/JEZ_ctx_B_soc_008_orthoMosaic_6m_Eqc_latTs0_lon0). The USGS product record instructs “Please cite authors”; the older XML says use constraints None. The distinct creator/originator lists, independent re-download evidence, source hashes and unverified original retrieval date are documented in `Data/imagery/README.md`. NASA/USGS do not endorse this prototype.
 
 ## Routing policy and limitations
 

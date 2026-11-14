@@ -9,3 +9,5 @@ The grid has 267 columns by 267 rows (71,289 cells), with 20 m projected pixel s
 This is a research/demo dataset, not operational Mars navigation or a safety assessment. Image-to-DEM physical registration and the DEM vertical datum remain unresolved. Slope thresholds, hazard classes and friction are prototype assumptions and do not prove rover or astronaut traversability.
 
 To verify the four package payloads, run a SHA-256 checker from the `navigation` directory against `checksums.sha256`; the checksum file does not hash itself. No raw rasters are included.
+
+`imagery/` contains the M2-04 terrain PNG, metadata, README, validation report and checksum manifest. See its README for source attribution and limitations.
