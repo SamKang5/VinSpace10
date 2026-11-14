@@ -9,7 +9,7 @@
 //
 // Usage: node scripts/build-grid-bin.mjs <grid.json> <out.bin> [metadata.json] [out-meta.json]
 
-import { readFileSync, writeFileSync, mkdirSync, copyFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { loadMarsNavigationGrid } from '../src/lib/navigationGrid/index.ts';
 
@@ -55,7 +55,9 @@ mkdirSync(dirname(OUT), { recursive: true });
 writeFileSync(OUT, out);
 
 mkdirSync(dirname(META_OUT), { recursive: true });
-copyFileSync(META_SRC, META_OUT);
+// Write the metadata copy with LF endings so the served bytes are identical
+// on every platform and hash to the accepted package digest byte-for-byte.
+writeFileSync(META_OUT, readFileSync(META_SRC, 'utf8').replace(/\r\n/g, '\n'));
 
 const nulls = model.grid.cost.reduce((a, c) => a + (c === null ? 1 : 0), 0);
 console.log(

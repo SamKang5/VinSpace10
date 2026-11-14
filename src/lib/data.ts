@@ -8,11 +8,17 @@
 // The full export is validated fail-closed at build time by the team's own
 // M2-02 loader (src/lib/navigationGrid), so a malformed or drifted export
 // fails the build. At runtime the binary is cross-checked against the
-// published grid metadata, which is small enough to ship.
+// published grid metadata, and EVERY served payload — the grid binary, the
+// terrain image, the overlay rasters and all metadata JSON — is downloaded
+// once as bytes, SHA-256 hashed, and compared against
+// public/terrain/asset_manifest.json AND the pinned accepted digests in
+// src/lib/acceptedAssets.ts. The bytes that are hashed are the bytes that
+// are parsed, so the app can never route or render unverified content.
 
 import { GRID_HEIGHT, GRID_WIDTH } from './geo.ts';
 import { parseGridMetadata, type GridMetadata } from './navigationGrid/index.ts';
 import { NODATA, slopeFromCost, type GridPoint, type RoutingGrid } from './router.ts';
+import { ACCEPTED_CTX_SOURCE_SHA256, ACCEPTED_TERRAIN_ASSETS } from './acceptedAssets.ts';
 
 export interface TerrainImageMeta {
   schemaVersion: string;
@@ -64,6 +70,19 @@ export interface AppData {
   /** The D07 slope-class raster: 0 below 5 deg, 1 up to 10, 2 up to 15, 3 blocked. */
   hazard: Uint8Array;
   overlay: OverlayMeta;
+  /**
+   * The SHA-256-verified terrain PNG bytes. The map must render the image
+   * from a Blob URL over exactly these bytes — never a second fetch of the
+   * origin URL, whose response could differ from what was verified.
+   */
+  terrainImage: { readonly bytes: ArrayBuffer; readonly sha256: string; readonly mimeType: 'image/png' };
+}
+
+export class AssetVerificationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'AssetVerificationError';
+  }
 }
 
 /**
@@ -72,14 +91,61 @@ export interface AppData {
  * The optional chaining keeps this module importable from the Node check
  * script, where `import.meta.env` does not exist.
  */
-export const DATA_URLS = {
-  grid: `${import.meta.env?.BASE_URL ?? './'}terrain/navigation_grid.bin`,
-  gridMetadata: `${import.meta.env?.BASE_URL ?? './'}terrain/grid_metadata.json`,
-  meta: `${import.meta.env?.BASE_URL ?? './'}terrain/ctx-aoi-meta.json`,
-  elevation: `${import.meta.env?.BASE_URL ?? './'}terrain/elevation.bin`,
-  hazard: `${import.meta.env?.BASE_URL ?? './'}terrain/hazard.bin`,
-  overlayMetadata: `${import.meta.env?.BASE_URL ?? './'}terrain/overlay_metadata.json`,
-} as const;
+export function assetUrls(base: string = `${import.meta.env?.BASE_URL ?? './'}`) {
+  const b = base.replace(/\/+$/, '');
+  return {
+    grid: `${b}/terrain/navigation_grid.bin`,
+    gridMetadata: `${b}/terrain/grid_metadata.json`,
+    meta: `${b}/terrain/ctx-aoi-meta.json`,
+    elevation: `${b}/terrain/elevation.bin`,
+    hazard: `${b}/terrain/hazard.bin`,
+    overlayMetadata: `${b}/terrain/overlay_metadata.json`,
+    manifest: `${b}/terrain/asset_manifest.json`,
+  } as const;
+}
+
+export const DATA_URLS = assetUrls();
+
+/** SHA-256 of bytes via WebCrypto (browser and Node >= 20). */
+export async function sha256Hex(bytes: ArrayBuffer): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', bytes);
+  return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+interface AssetManifest {
+  schemaVersion: string;
+  files: Record<string, string>;
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/** Parse and structurally validate the served asset manifest. */
+function parseAssetManifest(raw: unknown): AssetManifest {
+  if (!isPlainObject(raw)) {
+    throw new AssetVerificationError('asset_manifest.json must be a JSON object');
+  }
+  if (raw['schemaVersion'] !== '1.0') {
+    throw new AssetVerificationError(
+      `asset_manifest.json schemaVersion must be "1.0", got ${JSON.stringify(raw['schemaVersion'])}`,
+    );
+  }
+  const filesRaw = raw['files'];
+  if (!isPlainObject(filesRaw) || Object.keys(filesRaw).length === 0) {
+    throw new AssetVerificationError('asset_manifest.json "files" must be a non-empty object');
+  }
+  const files: Record<string, string> = {};
+  for (const [filename, digest] of Object.entries(filesRaw)) {
+    if (typeof digest !== 'string' || !/^[0-9a-f]{64}$/.test(digest)) {
+      throw new AssetVerificationError(
+        `asset_manifest.json digest for "${filename}" must be a 64-char lowercase hex digest`,
+      );
+    }
+    files[filename] = digest;
+  }
+  return { schemaVersion: '1.0', files };
+}
 
 /** Decode the binary grid produced by scripts/build-grid-bin.mjs. */
 export function decodeGrid(buffer: ArrayBuffer): {
@@ -113,33 +179,105 @@ export function decodeGrid(buffer: ArrayBuffer): {
 }
 
 /**
- * Load everything the app needs and cross-check it against the published
- * metadata.
+ * Load everything the app needs, verify every served byte, and cross-check
+ * the payloads against each other and the published metadata.
  *
- * The counts in `grid_metadata.json` were recomputed from the export when the
- * binary was built, so a mismatch here means the binary and the metadata
- * disagree and the app must not route over it.
+ * Verification layers (all must pass, fail-closed):
+ * 1. The served `asset_manifest.json` must exactly match the pinned accepted
+ *    digests in src/lib/acceptedAssets.ts (same file set, same digests) —
+ *    replacing both a payload and the manifest is therefore detectable.
+ * 2. Every payload is fetched ONCE as bytes, SHA-256 hashed, and compared
+ *    against the manifest and the pinned digests. The hashed bytes are the
+ *    parsed bytes — there is no second fetch that could diverge.
+ * 3. The verified terrain image metadata must declare the accepted CTX
+ *    source digest and describe exactly this grid.
+ * 4. Content cross-checks: binary dimensions and traversable counts vs the
+ *    metadata, raster byte sizes, hazard classes vs the blocked mask.
+ *
+ * The verified terrain PNG bytes are returned in the result; the app renders
+ * the image from a Blob URL over exactly those bytes.
  */
-export async function loadAppData(signal?: AbortSignal): Promise<AppData> {
-  const [binRes, metaRes, gridMetadataRes, elevationRes, hazardRes, overlayRes] = await Promise.all([
-    fetch(DATA_URLS.grid, { signal }),
-    fetch(DATA_URLS.meta, { signal }),
-    fetch(DATA_URLS.gridMetadata, { signal }),
-    fetch(DATA_URLS.elevation, { signal }),
-    fetch(DATA_URLS.hazard, { signal }),
-    fetch(DATA_URLS.overlayMetadata, { signal }),
-  ]);
-  if (!binRes.ok) throw new Error(`navigation grid failed to load (${binRes.status})`);
-  if (!metaRes.ok) throw new Error(`terrain metadata failed to load (${metaRes.status})`);
-  if (!gridMetadataRes.ok) {
-    throw new Error(`grid metadata failed to load (${gridMetadataRes.status})`);
-  }
-  if (!elevationRes.ok) throw new Error(`elevation raster failed to load (${elevationRes.status})`);
-  if (!hazardRes.ok) throw new Error(`hazard raster failed to load (${hazardRes.status})`);
-  if (!overlayRes.ok) throw new Error(`overlay metadata failed to load (${overlayRes.status})`);
+export async function loadAppData(
+  signal?: AbortSignal,
+  urls: ReturnType<typeof assetUrls> = DATA_URLS,
+): Promise<AppData> {
+  const fetchBytes = async (url: string): Promise<ArrayBuffer> => {
+    const response = await fetch(url, { signal });
+    if (!response.ok) throw new AssetVerificationError(`${url} failed to load (HTTP ${response.status})`);
+    return response.arrayBuffer();
+  };
 
-  const metadata = parseGridMetadata(await gridMetadataRes.json());
-  const decoded = decodeGrid(await binRes.arrayBuffer());
+  const [manifestBytes, binBytes, gridMetadataBytes, metaBytes, elevationBytes, hazardBytes, overlayBytes, pngBytes] =
+    await Promise.all([
+      fetchBytes(urls.manifest),
+      fetchBytes(urls.grid),
+      fetchBytes(urls.gridMetadata),
+      fetchBytes(urls.meta),
+      fetchBytes(urls.elevation),
+      fetchBytes(urls.hazard),
+      fetchBytes(urls.overlayMetadata),
+      fetchBytes(`${urls.manifest.replace(/asset_manifest\.json$/, '')}ctx-jezero-aoi.png`),
+    ]);
+
+  // Layer 1: the served manifest must exactly match the pinned accepted
+  // digests — same file set, same digests.
+  let manifest: AssetManifest;
+  try {
+    manifest = parseAssetManifest(JSON.parse(new TextDecoder().decode(manifestBytes)));
+  } catch (cause) {
+    if (cause instanceof AssetVerificationError) throw cause;
+    throw new AssetVerificationError(
+      `asset_manifest.json is not a usable manifest: ${cause instanceof Error ? cause.message : String(cause)}`,
+    );
+  }
+  const issues: string[] = [];
+  for (const [filename, expected] of Object.entries(ACCEPTED_TERRAIN_ASSETS)) {
+    const served = manifest.files[filename];
+    if (served === undefined) {
+      issues.push(`accepted file "${filename}" is missing from the served asset manifest`);
+    } else if (served !== expected) {
+      issues.push(
+        `served manifest digest for "${filename}" does not match the accepted reference ` +
+          `(${served} != ${expected})`,
+      );
+    }
+  }
+  for (const filename of Object.keys(manifest.files)) {
+    if (!(filename in ACCEPTED_TERRAIN_ASSETS)) {
+      issues.push(`served asset manifest lists unexpected file "${filename}"`);
+    }
+  }
+  if (issues.length > 0) {
+    throw new AssetVerificationError(
+      `Data package verification failed — refusing to render unverified data:\n  - ${issues.join('\n  - ')}`,
+    );
+  }
+
+  // Layer 2: every payload's bytes must hash to the accepted digest.
+  const payloads: Array<{ label: string; filename: string; bytes: ArrayBuffer }> = [
+    { label: 'navigation grid binary', filename: 'navigation_grid.bin', bytes: binBytes },
+    { label: 'grid metadata', filename: 'grid_metadata.json', bytes: gridMetadataBytes },
+    { label: 'terrain image', filename: 'ctx-jezero-aoi.png', bytes: pngBytes },
+    { label: 'terrain image metadata', filename: 'ctx-aoi-meta.json', bytes: metaBytes },
+    { label: 'elevation raster', filename: 'elevation.bin', bytes: elevationBytes },
+    { label: 'hazard raster', filename: 'hazard.bin', bytes: hazardBytes },
+    { label: 'overlay metadata', filename: 'overlay_metadata.json', bytes: overlayBytes },
+  ];
+  for (const { label, filename, bytes } of payloads) {
+    const actual = await sha256Hex(bytes);
+    const expected = manifest.files[filename];
+    if (actual !== expected) {
+      throw new AssetVerificationError(
+        `${label} (${filename}) failed verification: served bytes do not match the accepted digest ` +
+          `(${actual} != ${expected})`,
+      );
+    }
+  }
+
+  // The verified bytes are the parsed bytes.
+  const decodeJson = (bytes: ArrayBuffer): unknown => JSON.parse(new TextDecoder().decode(bytes));
+  const metadata = parseGridMetadata(JSON.parse(new TextDecoder().decode(gridMetadataBytes)));
+  const decoded = decodeGrid(binBytes);
 
   if (decoded.width !== GRID_WIDTH || decoded.height !== GRID_HEIGHT) {
     throw new Error(`unexpected grid size ${decoded.width}x${decoded.height}`);
@@ -163,13 +301,26 @@ export async function loadAppData(signal?: AbortSignal): Promise<AppData> {
     );
   }
 
-  const meta = (await metaRes.json()) as TerrainImageMeta;
-  const overlay = (await overlayRes.json()) as OverlayMeta;
+  const meta = validateTerrainImageMeta(decodeJson(metaBytes));
+  const overlay = decodeJson(overlayBytes) as OverlayMeta;
+
+  // The terrain image must describe exactly this grid, be grid-aligned with
+  // integer pixels per cell, and declare the accepted CTX source.
+  if (meta.image !== 'ctx-jezero-aoi.png') {
+    throw new Error(`terrain image metadata names an unexpected image "${meta.image}"`);
+  }
+  if (meta.width !== GRID_WIDTH * meta.pxPerCell || meta.height !== GRID_HEIGHT * meta.pxPerCell) {
+    throw new Error(
+      `terrain image is ${meta.width}x${meta.height} but the grid needs ` +
+        `${GRID_WIDTH * meta.pxPerCell}x${GRID_HEIGHT * meta.pxPerCell} at ${meta.pxPerCell} px/cell`,
+    );
+  }
+  if (meta.source['sha256'] !== ACCEPTED_CTX_SOURCE_SHA256) {
+    throw new Error('terrain image metadata declares a CTX source that is not the accepted mosaic');
+  }
 
   // The overlay rasters are the same grid frame as the navigation grid, so a
   // size mismatch means they belong to a different export.
-  const elevationBytes = await elevationRes.arrayBuffer();
-  const hazardBytes = await hazardRes.arrayBuffer();
   const cellCount = decoded.width * decoded.height;
   if (elevationBytes.byteLength !== cellCount * 4) {
     throw new Error(
@@ -211,25 +362,99 @@ export async function loadAppData(signal?: AbortSignal): Promise<AppData> {
     elevation,
     hazard,
     overlay,
+    terrainImage: { bytes: pngBytes, sha256: manifest.files['ctx-jezero-aoi.png'] ?? '', mimeType: 'image/png' },
   };
 }
 
 /**
- * Convert a position inside the terrain image to a grid cell (M1-04).
+ * Validate the terrain image metadata fail-closed against the grid
+ * constants and the accepted CTX source provenance.
+ */
+export function validateTerrainImageMeta(raw: unknown): TerrainImageMeta {
+  function fail(message: string): never {
+    throw new Error(`terrain image metadata is invalid: ${message}`);
+  }
+  if (!isPlainObject(raw)) fail('expected a JSON object');
+  const meta = raw as Record<string, unknown>;
+
+  if (meta['schemaVersion'] !== '1.0') {
+    fail(`schemaVersion must be "1.0", got ${JSON.stringify(meta['schemaVersion'])}`);
+  }
+  if (typeof meta['image'] !== 'string' || !meta['image'].endsWith('.png')) {
+    fail(`image must be a .png filename, got ${JSON.stringify(meta['image'])}`);
+  }
+  const width = meta['width'];
+  const height = meta['height'];
+  if (typeof width !== 'number' || !Number.isInteger(width) || width < 1) fail('width must be a positive integer');
+  if (typeof height !== 'number' || !Number.isInteger(height) || height < 1) fail('height must be a positive integer');
+
+  const pxPerCell = meta['pxPerCell'];
+  if (typeof pxPerCell !== 'number' || !Number.isInteger(pxPerCell) || pxPerCell < 1) {
+    fail(`pxPerCell must be a positive integer, got ${JSON.stringify(pxPerCell)}`);
+  }
+  const metersPerPx = meta['metersPerPx'];
+  if (typeof metersPerPx !== 'number' || !Number.isFinite(metersPerPx) || metersPerPx <= 0) {
+    fail('metersPerPx must be a finite number > 0');
+  }
+
+  const grid = meta['grid'];
+  if (!isPlainObject(grid)) fail('grid must be an object');
+  const gridWidth = grid['width'];
+  const gridHeight = grid['height'];
+  if (gridWidth !== GRID_WIDTH || gridHeight !== GRID_HEIGHT) {
+    fail(`grid must be ${GRID_WIDTH}x${GRID_HEIGHT}, got ${JSON.stringify(gridWidth)}x${JSON.stringify(gridHeight)}`);
+  }
+  if (grid['cellMeters'] !== 20) fail('grid.cellMeters must be 20');
+  if (grid['colOffset'] !== 0 || grid['rowOffset'] !== 0) {
+    fail('grid offsets must be 0: the image is grid-aligned by construction');
+  }
+  for (const key of ['colScale', 'rowScale'] as const) {
+    const value = grid[key];
+    if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
+      fail(`grid.${key} must be a finite number > 0`);
+    }
+  }
+
+  const source = meta['source'];
+  if (!isPlainObject(source)) fail('source must be an object');
+  const sourceSha256 = source['sha256'];
+  if (typeof sourceSha256 !== 'string' || !/^[0-9a-f]{64}$/.test(sourceSha256)) {
+    fail('source.sha256 must be a 64-char lowercase hex digest');
+  }
+  if (sourceSha256 !== ACCEPTED_CTX_SOURCE_SHA256) {
+    fail('source.sha256 does not match the accepted CTX orthomosaic');
+  }
+
+  return raw as unknown as TerrainImageMeta;
+}
+
+/**
+ * Convert a position inside the terrain image to a grid cell (M1-04),
+ * following the M2-03 coordinate contract:
  *
- * The image is grid-aligned by construction, so the conversion is a scale and
- * a floor. The result is clamped to the grid, and null is returned when the
- * point falls outside the image entirely.
+ * - west/north image edges are INCLUSIVE (pixel 0 is cell column/row 0),
+ * - east/south image edges are EXCLUSIVE and are REJECTED, never clamped to
+ *   the last cell,
+ * - internal pixel boundaries belong to the cell east/south of them
+ *   (integer division by pxPerCell, which is exact for integer pixel
+ *   coordinates — never `pixel * (1/pxPerCell)`, whose rounding error
+ *   misplaces boundary clicks by one cell at 3 px/cell).
+ *
+ * Non-finite or out-of-bounds points return null; callers must not clamp.
  */
 export function imagePixelToGrid(
   meta: TerrainImageMeta,
   pixelX: number,
   pixelY: number,
 ): GridPoint | null {
-  if (pixelX < 0 || pixelY < 0 || pixelX > meta.width || pixelY > meta.height) return null;
-  const g = meta.grid;
-  const col = Math.min(g.width - 1, Math.max(0, Math.floor(pixelX * g.colScale + g.colOffset)));
-  const row = Math.min(g.height - 1, Math.max(0, Math.floor(pixelY * g.rowScale + g.rowOffset)));
+  if (!Number.isFinite(pixelX) || !Number.isFinite(pixelY)) return null;
+  if (pixelX < 0 || pixelY < 0 || pixelX >= meta.width || pixelY >= meta.height) return null;
+  const pxPerCell = meta.pxPerCell;
+  if (!Number.isInteger(pxPerCell) || pxPerCell < 1) return null;
+  if (meta.grid.colOffset !== 0 || meta.grid.rowOffset !== 0) return null;
+  const col = Math.floor(pixelX / pxPerCell);
+  const row = Math.floor(pixelY / pxPerCell);
+  if (col < 0 || row < 0 || col >= meta.grid.width || row >= meta.grid.height) return null;
   return [row, col];
 }
 

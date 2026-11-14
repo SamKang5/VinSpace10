@@ -9,3 +9,9 @@
 
 # The web build of the grid is generated from the JSON export at build time.
 /public/terrain/navigation_grid.bin -text
+
+# The runtime-verified JSON assets must keep their published bytes: the app
+# hashes the exact served bytes against the accepted package digests.
+/public/terrain/grid_metadata.json -text
+/public/terrain/ctx-aoi-meta.json -text
+/public/terrain/overlay_metadata.json -text

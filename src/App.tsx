@@ -65,8 +65,20 @@ export default function App() {
   const inspectorClose = useRef<HTMLButtonElement>(null);
   const layers = useRef<HTMLDetailsElement>(null);
   const mapCanvas = useRef<HTMLCanvasElement>(null);
+  /** Blob URL over the SHA-256-verified terrain bytes currently displayed. */
+  const terrainUrlRef = useRef<string | null>(null);
 
   const data = loaded?.data ?? null;
+
+  // Unmount: the displayed Blob URL is no longer used — revoke it.
+  useEffect(() => {
+    return () => {
+      if (terrainUrlRef.current !== null) {
+        URL.revokeObjectURL(terrainUrlRef.current);
+        terrainUrlRef.current = null;
+      }
+    };
+  }, []);
 
   useEffect(() => {
     if (inspectorOpen) inspectorClose.current?.focus({ preventScroll: true });
@@ -79,23 +91,45 @@ export default function App() {
       if (controller.signal.aborted) return;
       setLoadStatus('Decoding CTX orthomosaic…');
 
+      // The map renders from a Blob URL over the SHA-256-verified PNG bytes —
+      // the origin URL is never requested again, so the displayed pixels are
+      // exactly the bytes that passed verification.
+      const blobUrl = URL.createObjectURL(
+        new Blob([nextData.terrainImage.bytes], { type: nextData.terrainImage.mimeType }),
+      );
       const image = new Image();
-      image.src = import.meta.env.BASE_URL + 'terrain/' + nextData.meta.image;
+      image.src = blobUrl;
       try {
         await image.decode();
       } catch {
-        throw new Error('The CTX orthomosaic could not be loaded or decoded.');
+        URL.revokeObjectURL(blobUrl);
+        throw new Error('The verified CTX orthomosaic could not be decoded.');
       }
-      if (controller.signal.aborted) return;
+      if (controller.signal.aborted) {
+        URL.revokeObjectURL(blobUrl);
+        return;
+      }
+      // Supersede: revoke the previous attempt's URL once the new image is
+      // decoded and committed (the old map is replaced by this update).
+      const previous = terrainUrlRef.current;
+      terrainUrlRef.current = blobUrl;
       setStart(EXAMPLE_START);
       setEnd(EXAMPLE_END);
       setCalculating(true);
       setLoaded({ data: nextData, image });
+      if (previous !== null) URL.revokeObjectURL(previous);
     };
     load().catch((cause: unknown) => {
       if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : String(cause));
     });
-    return () => controller.abort();
+    return () => {
+      controller.abort();
+      // The map is unmounting: its Blob URL is no longer used.
+      if (terrainUrlRef.current !== null) {
+        URL.revokeObjectURL(terrainUrlRef.current);
+        terrainUrlRef.current = null;
+      }
+    };
   }, [loadAttempt]);
 
   const slopeOverlay = useMemo(
