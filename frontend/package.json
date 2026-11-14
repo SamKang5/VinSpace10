@@ -1,15 +1,26 @@
 {
   "name": "mars-navigator-frontend",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
-  "description": "MARS NAVIGATOR frontend — M2-02 navigation grid data loader (research/demo only; not operational navigation)",
+  "description": "MARS NAVIGATOR frontend — M2-02 navigation grid loader + interactive Mars map (research/demo only; not operational navigation)",
   "type": "module",
   "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
     "test": "node --test \"tests/*.test.ts\"",
     "typecheck": "tsc --noEmit"
   },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
   "devDependencies": {
     "@types/node": "^24.10.1",
-    "typescript": "^5.9.3"
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "typescript": "^5.9.3",
+    "vite": "^5.4.11"
   }
 }

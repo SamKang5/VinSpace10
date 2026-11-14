@@ -1,0 +1,19 @@
+# M2-04 browser terrain image
+
+`mars_terrain.png` is a losslessly optimized 1068 × 1068 grayscale + alpha PNG derived from the D08 CTX display image. It is a browser-ready static image; no GIS code is needed at runtime. Serve it with `imagery_metadata.json` and the M2-02 package. The PNG is not itself georeferenced: use the accompanying metadata.
+
+The image and 267 × 267 grid share the same outer bounds and Mars 2000 sphere equirectangular CRS. Image origin is top-left; x increases east, y increases south. One 20 m projected grid cell spans 4 × 4 image pixels at 5 m projected spacing. For `[row,col]`, its centre has continuous image corner-origin coordinates `(4*col+2, 4*row+2)`. These are continuous coordinates, not necessarily PNG pixel centres. For the image affine `[a,b,c,d,e,f]`, projected coordinates are `x=a*pixelX+b*pixelY+c`, `y=d*pixelX+e*pixelY+f`. Image pixels represent display-resampled data, not 5 m native science observations.
+
+Draw the full image over the metadata bounds without flipping or distortion. Account for viewport pan, zoom and CSS scaling before mapping screen clicks; test the UI against M2-03. Use masks to exclude blocked/unknown route cells. Research/demo only: numerical alignment is not independent physical image-to-DEM registration, the DEM vertical datum is unresolved, and the data do not establish real terrain safety.
+
+## Source attribution and provenance
+
+Credit: USGS Astrogeology Science Center; CTX instrument, NASA Mars Reconnaissance Orbiter. Fergason et al. (2020), *Mars 2020 Terrain Relative Navigation Context Camera Orthorectified Image Mosaic*, [USGS DOI 10.5066/P9GV1ND3](https://doi.org/10.5066/P9GV1ND3); [USGS product record](https://astrogeology.usgs.gov/search/map/Mars/Mars2020/JEZ_ctx_B_soc_008_orthoMosaic_6m_Eqc_latTs0_lon0). The USGS data-release citation lists five creators: Fergason, Galuszka, Hare, Mayer and Redding. The local XML separately lists six originators, adding Smith, and its literal title is “Context Camera Orthorectifiedimage Mosaic for Mars 2020 Terrain Relative Navigation”. The live product page separately references a nine-author conference work; these are distinct author lists, not a combined citation.
+
+The live USGS product record states access constraints “None” and use constraints “Please cite authors”; cite the product and its authors. The older local FGDC XML states `accconst=None` and `useconst=None`; the live record is the more explicit current instruction. No separate license grant or original local retrieval date has been verified. The independent review reports successful live DOI/product access and publisher-hosted CTX and DTM re-downloads on 2026-11-14; their SHA-256 values matched the local fingerprints below. No official publisher checksum manifest was found. Publication date is not the original retrieval date. NASA/USGS endorsement is not implied.
+
+CTX `JEZ_ctx_B_soc_008_orthoMosaic_6m_Eqc_latTs0_lon0.tif`: SHA-256 `842b457afee7c2672022b66e3f60be836c6d52e99474015bfd9ced60099b8615`. Paired DEM `JEZ_ctx_B_soc_008_DTM_MOLAtopography_DeltaGeoid_20m_Eqc_latTs0_lon0.tif`: SHA-256 `16a1aa66c3f48c1bca252795827db7b417876217aff0f5e1aff18027fab2327b`. D08 intermediate image SHA-256 `086739f4cb301dd4642c012cc4215f8a96ffe01eaca535577326960271f56f7a`; D08 bilinearly resampled CTX, then this package losslessly optimized the PNG.
+
+The reviewed build used GDAL 3.13.3 and Pillow 12.3.0. PNG pixels are checked losslessly; compressed bytes may differ across Pillow/zlib versions, so regenerate the checksum manifest when intentionally rebuilding.
+
+Rebuild/validate from the workspace with Python 3.10+, GDAL Python bindings, NumPy and Pillow: `python scripts/build_m2_04_imagery.py`; run focused tests with `python -m unittest discover -s tests -p test_m2_04_imagery.py -v`. Source data remains read-only. `checksums.sha256` covers the image, metadata, this README and validation report, excluding itself.

@@ -1,9 +1,8 @@
-# MARS NAVIGATOR — frontend data loader (M2-02 navigation grid)
+# MARS NAVIGATOR — frontend (M1 map + M2-02 navigation grid loader)
 
-TypeScript loader for the M2-02 navigation grid export (`Data/navigation/` in
-this workspace, originally `exports/M2_02`). It parses and validates
-`navigation_grid.json` + `grid_metadata.json` and exposes a verified,
-query-ready model for the M1 frontend.
+React + TypeScript frontend for MARS NAVIGATOR: the interactive Mars map
+(M1-02/03/04) built on the verified M2-02 navigation grid loader and the M2-04
+imagery package.
 
 **RESEARCH/DEMO DATA — NOT FOR OPERATIONAL MARS NAVIGATION.**
 
@@ -36,6 +35,77 @@ try {
 
 If you already have the two parsed JSON objects (e.g. bundled at build time),
 use the sync path: `loadMarsNavigationGrid(rawGrid, rawMetadata)`.
+
+## The app (M1-02/03/04)
+
+`npm run dev` starts Vite (default <http://localhost:5173>); `npm run build`
+type-checks and bundles into `dist/`; `npm run preview` serves the bundle.
+The app loads both packages at startup and refuses to render unless:
+
+- the navigation grid validates (loader contract, below),
+- `imagery_metadata.json` validates (dimensions, 5 m/px affine, bounds/CRS
+  identical to the grid, route endpoints consistent with the grid),
+- every file in the imagery `checksums.sha256` matches its served bytes and
+  the served `grid_metadata.json` hashes to
+  `imagery_metadata.navigationGrid.metadataSha256`.
+
+Any failure lands on an error screen with the reason and a retry; nothing is
+ever displayed from unverified data.
+
+Map behaviour (implemented in pure modules so it is unit-testable):
+
+- `src/app/mapTransform.ts` — viewport transform (`screen = offset + image *
+  scale`), drag panning, cursor-anchored wheel zoom with scale clamping, and
+  fit/reset. A CSS resize does not mutate the transform, so image coordinates
+  and marker alignment are stable under responsive resizing; only the
+  explicit reset refits.
+- `src/app/selection.ts` — the M2-03 click contract: image pixel → projected
+  metres through the image affine, footprint guard
+  (`xmin <= x < xmax`, `ymin < y <= ymax`), floor conversion to `[row, col]`,
+  then traversability gating. Out-of-bounds, blocked and unknown clicks are
+  rejected with an explanation and are NEVER clamped to the nearest cell.
+- `src/app/components/MapViewport.tsx` — pointer/wheel handling and the A/B
+  markers. Markers are reprojected from the same transform that draws the
+  image, so they cannot drift while panning or zooming.
+- Endpoint selection: arm "Set Start (A)" / "Set Goal (B)", then click a
+  traversable cell. "Load contract endpoints" selects the handoff's verified
+  endpoints (`[230, 30]` at image (122, 922) and `[35, 235]` at (942, 142)).
+- Screenshots from the browser smoke test: `docs/screenshots/`.
+
+## M5 router interface (route/contract.ts)
+
+The frontend defines the typed interface M5's A* router must implement. No
+routing exists yet and no route is ever fabricated: with valid endpoints the
+UI shows an explicit `awaiting-router` placeholder.
+
+```ts
+import {
+  setRoutePlanner, routeStatusForSelections,
+  createRouteRequest,
+  type RoutePlanner, type RouteRequest, type RouteResult,
+} from "./src/route/index.ts";
+
+// M5 implements:
+const planner: RoutePlanner = {
+  id: "astar-d07",
+  planRoute(request: RouteRequest): Promise<RouteResult> {
+    // request.start / request.goal are validated traversable GridCellRefs;
+    // request.grid carries {width, height}. Follow the D07 policy in
+    // grid_metadata.json sourcePolicy.astar (edge cost = great-circle
+    // centre distance x mean endpoint friction, admissible heuristic with
+    // minimum friction 1, no diagonal corner cutting, report no-route for
+    // disconnected regions).
+    // Return { status: "ok", path, totalCost } | { status: "no-route", ... }
+    // | { status: "error", ... } — never a fabricated path.
+  },
+};
+setRoutePlanner(planner);
+```
+
+`createRouteRequest(model, start, goal)` validates an endpoint pair
+fail-closed (both cells in bounds, supported, unblocked, finite cost) and
+`routeStatusForSelections(...)` drives the UI status. Until a planner is
+registered the status is `awaiting-router` with the typed request attached.
 
 ## Model API
 
@@ -96,22 +166,33 @@ load instead of producing silently wrong coordinates.
 ## Development
 
 ```bash
-npm install        # dev deps: typescript, @types/node (runtime needs no deps)
+npm install        # react + vite (runtime); typescript/@types for checks
 npm test           # node --test "tests/*.test.ts" (Node 24 native TS runner)
 npm run typecheck  # tsc --noEmit
+npm run dev        # Vite dev server
+npm run build      # typecheck + production bundle into dist/
+npm run preview    # serve the production bundle
 ```
 
-Tests are split into synthetic-fixture units (`navigationGrid.test.ts`,
-`coordinates.test.ts`) and real-data integration (`integration.test.ts`),
-which also verifies the copied assets against the export's `checksums.sha256`
-(after line-ending normalization) and exercises the HTTP fetch path with a
-local server.
+Tests are split into loader suites (`navigationGrid.test.ts`,
+`coordinates.test.ts`, `integration.test.ts`) and app suites
+(`mapTransform.test.ts`, `selection.test.ts`, `imagery.test.ts`,
+`routeContract.test.ts`). All data-touching suites run against the real
+served packages, verify checksum manifests, and exercise the HTTP fetch path
+with a local server. Component interaction is additionally covered by a
+manual browser smoke test (`docs/screenshots/`).
 
 ## Data assets
 
-`public/data/M2_02/` holds the served copy of the M2-02 package
-(`navigation_grid.json`, `grid_metadata.json`, `checksums.sha256`). The
-workspace `.gitattributes` marks this directory `-text` so checkouts never
-line-ending-normalize the published bytes (the SHA-256 checksums are
-byte-exact). If you refresh the copy from a new export, re-copy all three
-files together — the tests will catch any drift or CRLF mangling.
+- `public/data/M2_02/` — the M2-02 navigation package (`navigation_grid.json`,
+  `grid_metadata.json`, `README.md`, `M2_02_export_report.md`,
+  `checksums.sha256`), copied unchanged from `Data/navigation/`.
+- `public/data/M2_04/` — the M2-04 imagery package (`mars_terrain.png`,
+  `imagery_metadata.json`, `README.md`, `M2_04_validation_report.md`,
+  `checksums.sha256`), copied unchanged from the accepted
+  `data/m2-04-imagery-handoff` branch.
+
+The workspace `.gitattributes` marks both directories `-text` so checkouts
+never line-ending-normalize the published bytes (SHA-256 checksums are
+byte-exact). If you refresh a package, re-copy all of its files together —
+the tests catch any drift, missing file or CRLF mangling.
