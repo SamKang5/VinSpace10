@@ -1,6 +1,6 @@
 # MARS NAVIGATOR — M2-05 data handoff
 
-**Handoff: complete for research/demo use; integration remains conditional.** The verified M2-02 navigation grid and M2-04 browser image are available as repository files. M1/M5 must serve them together, implement the display/click integration and validate the actual router before claiming an integrated demo. This is not an operational navigation or safety product.
+**Handoff: complete for research/demo use; integration remains conditional.** The verified M2-02 navigation grid is published; the M2-04 image and this handoff are prepared on a local branch and are not yet shared. M1/M5 must serve them together, implement the display/click integration and validate the actual router before claiming an integrated demo. This is not an operational navigation or safety product.
 
 ## Deliverables and access
 
@@ -10,7 +10,7 @@
 - Original CTX orthomosaic and D07 rasters remain local to the data engineer under `D:\Nasa_Data\`; their source names and hashes are in the package metadata. The optimized image is derived losslessly from the D08 display image, itself bilinearly resampled from the CTX source. Team members do not need the originals to consume the package.
 - M2-03's independently checked coordinate contract is reproduced below. Its generated `reports/M2_03_coordinate_contract.md` is not in this checkout. The `scripts/validate_coordinate_contract.py` validator currently exists as staged workspace work on the M1 checkout, not on the published data branch; bring that validator through its owner's branch if the team needs to regenerate the standalone report. Its reported check compared nine representative and 1,000 seeded random centres to rasterio and checked every grid cost position against D07, with 0 m maximum observed centre discrepancy.
 
-The M1 loader lives on the separate `m1-02-navigation-grid-loader` branch. The imagery/handoff branch is based on `data/m2-02-export`, so it does **not** contain that loader. Integrate the branches through the team's normal review process; neither branch needs to be merged automatically. The following frontend path examples apply after both branches' files are present.
+The M1 loader is present in the shared workspace and published on [`m1-02-navigation-grid-loader`](https://github.com/SamKang5/VinSpace10/tree/m1-02-navigation-grid-loader) at `1903782d4203c41e34d4ba2f1de55f39f23313b2`, which descends from the published navigation branch. The imagery/handoff branch is based on `data/m2-02-export`, so it does **not** contain that loader. Integrate the branches through the team's normal review process; neither branch needs to be merged automatically. The following frontend path examples apply after both branches' files are present.
 
 ## M1 and M5: load the data
 
@@ -43,7 +43,7 @@ x = 4582523.250853 + 20*(col + 0.5)
 y = 1095993.140188 - 20*(row + 0.5)
 ```
 
-For a finite projected click in this CRS, first require **`xmin <= x < xmax` and `ymin < y <= ymax`**, then calculate `col=floor((x-xmin)/20)` and `row=floor((ymax-y)/20)`. West and north boundaries are inclusive; east and south are exclusive. Internal vertical and horizontal boundaries belong to the cell to the east and south, respectively. Reject outside points; never clamp. These are exact comparisons on represented floating-point coordinates; no snapping tolerance is applied. Validate availability after conversion. The current M1 `worldToCell` helper only checks its rounded result and may accept points just outside west/north; apply this explicit projected footprint guard before calling it. A separate UI snapping policy, if desired, must be defined and tested by the frontend team. No geographic longitude/latitude conversion is specified here.
+For a finite projected click in this CRS, first require **`xmin <= x < xmax` and `ymin < y <= ymax`**, then calculate `col=floor((x-xmin)/20)` and `row=floor((ymax-y)/20)`. West and north boundaries are inclusive; east and south are exclusive. Internal vertical and horizontal boundaries belong to the cell to the east and south, respectively. Reject outside points; never clamp. These are exact comparisons on represented floating-point coordinates; no snapping tolerance is applied. Validate availability after conversion. The M1 `worldToCell` helper uses nearest-centre rounding and has tested footprint boundary behavior for this axis-aligned grid; still apply the explicit projected footprint guard before calling it, then check traversability. A separate UI snapping policy, if desired, must be defined and tested by the frontend team. No geographic longitude/latitude conversion is specified here.
 
 ## Image placement and route example
 
@@ -56,6 +56,10 @@ The M2-04 image uses the same CRS and outer bounds as the grid. Its pixel-corner
 
 Both endpoints are supported, unblocked and finite-cost. The prior D08 example route file, available locally at `D:\Nasa_Data\D08_AStar_Routing\examples\route_comparison.json`, has connected shortest and terrain-weighted paths; both were rechecked against M2-02 in the preceding handoff. Endpoint validity is not proof that a newly integrated router finds the same path.
 
+## Imagery attribution
+
+Source: USGS Astrogeology Science Center, *Context Camera Orthorectifiedimage Mosaic for Mars 2020 Terrain Relative Navigation* (Fergason et al., 2020), from the CTX instrument on NASA Mars Reconnaissance Orbiter. [USGS DOI](https://doi.org/10.5066/P9GV1ND3) and [product record](https://astrogeology.usgs.gov/search/map/Mars/Mars2020/JEZ_ctx_B_soc_008_orthoMosaic_6m_Eqc_latTs0_lon0). The source filenames and SHA-256 hashes, source XML, local terms evidence and unverified retrieval date are documented in `Data/imagery/README.md`. NASA/USGS do not endorse this prototype.
+
 ## Routing policy and limitations
 
 For adjacent permitted cells `u,v`, D07 specifies `edgeCost = sphericalGreatCircleDistance(center(u),center(v)) * (friction(u)+friction(v))/2`. The admissible heuristic is the great-circle distance from the current cell centre to the goal centre times minimum friction `1`. Exclude unsupported, blocked and NoData-cost cells. For a diagonal step, **both** orthogonal side-neighbour cells must be in bounds and traversable; do not cut a blocked or unknown corner. Detect disconnected regions and report no route. The image is a display background and must not be used to infer traversability.
@@ -63,6 +67,8 @@ For adjacent permitted cells `u,v`, D07 specifies `edgeCost = sphericalGreatCirc
 The numerical coordinate match does not establish independent physical CTX-to-DEM registration. The DEM vertical datum remains unresolved; slope thresholds and friction are uncalibrated research assumptions. The DEM cannot resolve all small obstacles, terrain mechanics or dynamic hazards. Spherical distances are not 3D terrain-following distances. No physical astronaut/rover safety claim is supported.
 
 ## Verification
+
+See [M2-05 verification evidence](M2_05_VERIFICATION.md) for the publication-fix results, attribution evidence and remaining work.
 
 From the repository root, Python 3.10+ can verify both packages without GIS libraries:
 

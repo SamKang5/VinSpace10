@@ -2,3 +2,5 @@
 /Data/navigation/* -text
 # Preserve imagery package checksums across checkouts.
 /Data/imagery/* -text
+# Preserve existing frontend data assets byte-for-byte.
+/frontend/public/data/** -text
