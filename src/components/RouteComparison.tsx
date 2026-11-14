@@ -1,95 +1,93 @@
-// Route comparison cards (M4-03).
-//
-// Each card takes a live route result and shows the numbers the D08 pipeline
-// produces, so the panel and the map always agree.
-//
-// The two cards are a comparison, so they share one row of labels: each
-// metric reads across, which is the only way to see which route wins.
-
 import type { RouteMode, RouteResult } from '../lib/router';
-import { MODE_COLOR, MODE_LABEL, MODE_ORDER } from '../lib/theme';
+import { MODE_COLOR, MODE_DASHED, MODE_LABEL, MODE_ORDER } from '../lib/theme';
+import type { CSSProperties } from 'react';
 
 export interface RouteComparisonProps {
   results: Partial<Record<RouteMode, RouteResult>>;
   activeMode: RouteMode;
   onSelectMode: (mode: RouteMode) => void;
+  status: string;
+  resultRevision: number;
+  calculating: boolean;
 }
 
-const STATUS_TEXT: Record<RouteResult['status'], string> = {
-  ok: 'Route found',
-  out_of_bounds: 'End point is outside the grid',
-  blocked_endpoint: 'End point is blocked or unknown',
-  no_path: 'No traversable path connects these points',
-};
+const METRICS = [
+  { key: 'distanceMeters', label: 'Distance', unit: 'km', scale: 1000, digits: 2 },
+  { key: 'modeledCost', label: 'Modelled cost', unit: 'm × index', scale: 1, digits: 1 },
+  { key: 'meanSlopeDeg', label: 'Mean slope', unit: '°', scale: 1, digits: 1 },
+  { key: 'maxSlopeDeg', label: 'Max slope', unit: '°', scale: 1, digits: 1 },
+  { key: 'cells', label: 'Path size', unit: 'cells', scale: 1, digits: 0 },
+  { key: 'computationMs', label: 'Search', unit: 'ms', scale: 1, digits: 0 },
+] as const;
 
-function metres(value: number | null): string {
-  if (value === null) return '—';
-  if (value >= 1000) return `${(value / 1000).toFixed(2)} km`;
-  return `${value.toFixed(0)} m`;
+export function RouteSwatch({ mode }: { mode: RouteMode }) {
+  return (
+    <svg viewBox="0 0 32 8" width="32" height="8" aria-hidden="true"
+      style={{ '--route-colour': MODE_COLOR[mode] } as CSSProperties} className="route-swatch">
+      <path d="M0 4h32" fill="none" stroke="currentColor" strokeWidth="2"
+        strokeDasharray={MODE_DASHED[mode] ? '9 6' : undefined} />
+    </svg>
+  );
 }
 
-/** The metric rows, in the order the panel reads them. */
-const METRICS: { key: keyof RouteResult; label: string; format: (r: RouteResult) => string }[] = [
-  { key: 'distanceMeters', label: 'Distance', format: (r) => metres(r.distanceMeters) },
-  { key: 'modeledCost', label: 'Modelled cost', format: (r) => (r.modeledCost ?? 0).toFixed(0) },
-  { key: 'meanSlopeDeg', label: 'Mean slope', format: (r) => `${(r.meanSlopeDeg ?? 0).toFixed(1)}°` },
-  { key: 'maxSlopeDeg', label: 'Max slope', format: (r) => `${(r.maxSlopeDeg ?? 0).toFixed(1)}°` },
-  { key: 'cells', label: 'Cells', format: (r) => String(r.cells) },
-  { key: 'computationMs', label: 'Search', format: (r) => `${r.computationMs.toFixed(0)} ms` },
-];
-
-export function RouteComparison({ results, activeMode, onSelectMode }: RouteComparisonProps) {
-  if (MODE_ORDER.every((mode) => !results[mode])) {
-    return (
-      <p className="panel__note">
-        Place a start and an end point, then calculate a route to compare the two modes.
-      </p>
-    );
-  }
+export function RouteComparison({ results, activeMode, onSelectMode, status, resultRevision, calculating }: RouteComparisonProps) {
+  const hasRoute = MODE_ORDER.some((mode) => results[mode]?.status === 'ok');
 
   return (
-    <div className="compare">
-      {MODE_ORDER.map((mode) => {
-        const result = results[mode];
-        const isActive = mode === activeMode;
-        return (
-          <article
-            key={mode}
-            className={`card card--${mode === 'shortest' ? 'shortest' : 'terrain'} ${isActive ? 'is-active' : ''}`}
-            data-route-mode={mode}
-          >
-            <button
-              type="button"
-              className="card__head"
-              aria-pressed={isActive}
-              onClick={() => onSelectMode(mode)}
-            >
-              <span
-                className="mode__swatch"
-                style={{ background: MODE_COLOR[mode] }}
-                aria-hidden="true"
-              />
-              <span className="card__title">{MODE_LABEL[mode]}</span>
-              {isActive && <span className="card__badge">shown</span>}
-            </button>
-
-            {!result ? (
-              <p className="card__error">Not calculated.</p>
-            ) : result.status !== 'ok' ? (
-              <p className="card__error">{STATUS_TEXT[result.status]}</p>
-            ) : (
-              <dl className="card__metrics">
-                {METRICS.map((m) => (
-                  <div key={m.key}>
-                    <dt>{m.label}</dt>
-                    <dd>{m.format(result)}</dd>
-                  </div>
-                ))}
-              </dl>
-            )}
-          </article>
-        );
-      })}
+    <div className="comparison">
+      <p className="comparison__status" role="status">
+        {status}
+        {!calculating && hasRoute && <span className="sr-only">
+          {MODE_ORDER.map((mode) => {
+            const result = results[mode];
+            return result?.status === 'ok'
+              ? '. ' + MODE_LABEL[mode] + ', ' + result.cells + ' cells, modelled cost ' + result.modeledCost?.toFixed(1)
+              : '';
+          }).join('')}
+        </span>}
+      </p>
+      {hasRoute && (
+        <table className="comparison__table" aria-label="Route metrics" key={resultRevision}>
+          <colgroup><col /><col /><col /></colgroup>
+          <thead>
+            <tr>
+              <td className="comparison__axis">Map priority</td>
+              {MODE_ORDER.map((mode) => (
+                <th key={mode} scope="col" data-active={activeMode === mode}
+                  style={{ '--route-colour': MODE_COLOR[mode] } as CSSProperties}>
+                  <button type="button" className="route-select"
+                    aria-pressed={mode === activeMode}
+                    aria-disabled={calculating || results[mode]?.status !== 'ok'}
+                    aria-label={'Bring ' + MODE_LABEL[mode].toLowerCase() + ' to front'}
+                    onClick={() => results[mode]?.status === 'ok' && !calculating && onSelectMode(mode)}>
+                    <RouteSwatch mode={mode} />
+                    <span>{mode === 'shortest' ? 'Shortest' : 'Terrain-aware'}</span>
+                  </button>
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {METRICS.map(({ key, label, unit, scale, digits }) => (
+              <tr key={key} className={key === 'modeledCost' ? 'comparison__cost' : undefined}>
+                <th scope="row">{label}<span className="unit">{unit}</span></th>
+                {MODE_ORDER.map((mode) => {
+                  const result = results[mode];
+                  const value = result?.status === 'ok' ? result[key] : null;
+                  return (
+                    <td className="number" key={mode} data-active={activeMode === mode}>
+                      {value == null ? '—' : (value / scale).toFixed(digits)}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      {hasRoute && <p className="sr-only" role="status">
+        {MODE_LABEL[activeMode]} in front.
+      </p>}
     </div>
   );
 }

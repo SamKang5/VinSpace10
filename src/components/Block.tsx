@@ -1,51 +1,29 @@
 import { useId, useState, type ReactNode } from 'react';
+import { Icon } from './Icon';
 
-/**
- * A collapsible tool panel: a title bar that toggles the body.
- *
- * The blocks are collapsed by default so the rail shows the working area
- * first, and each one remembers its own state.
- */
-export interface BlockProps {
+export function Block({ title, defaultOpen = false, children }: {
   title: string;
-  /** The body. */
-  children: ReactNode;
-  /** Open on first render. */
   defaultOpen?: boolean;
-  /** A short line under the title, in the header. */
-  hint?: string;
-}
-
-export function Block({ title, children, defaultOpen = false, hint }: BlockProps) {
+  children: ReactNode;
+}) {
   const [open, setOpen] = useState(defaultOpen);
   const bodyId = useId();
 
   return (
-    <section className={`block ${open ? 'is-open' : 'is-collapsed'}`}>
-      <button
-        type="button"
-        className="block__head"
-        aria-expanded={open}
-        aria-controls={bodyId}
-        onClick={() => setOpen((v) => !v)}
-      >
-        <span>{title}</span>
-        {hint ? <span className="block__hint">{hint}</span> : null}
-        <svg
-          className="block__chevron"
-          viewBox="0 0 16 16"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1.6"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          aria-hidden="true"
-        >
-          <path d="m6 3 5 5-5 5" />
-        </svg>
-      </button>
-      <div className="block__body" id={bodyId}>
-        {children}
+    <section className="block">
+      <h2>
+        <button type="button" className="block__head" aria-expanded={open} aria-controls={bodyId}
+          onClick={() => setOpen((value) => !value)}>
+          {title}
+          <Icon name="chevron" />
+        </button>
+      </h2>
+      <div id={bodyId} className="block__reveal" data-open={open}
+        ref={(element) => { if (element) element.inert = !open; }}
+        aria-hidden={!open || undefined}>
+        <div className="block__clip">
+          <div className="block__body">{children}</div>
+        </div>
       </div>
     </section>
   );

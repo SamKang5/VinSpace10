@@ -21,15 +21,17 @@ const CLASS_COLOR: ReadonlyArray<readonly [number, number, number, number]> = [
   [242, 68, 45, 150],
 ];
 
+export const SLOPE_SWATCHES = CLASS_COLOR.map(([r, g, b, a]) => `rgb(${r} ${g} ${b} / ${a / 255})`);
+
 /** The slope in degrees that puts a cell in each class. */
 export const SLOPE_CLASS_EDGES = [5, 10, 15] as const;
 
 /** Human-readable label per class, for the legend. */
 export const SLOPE_CLASS_LABELS: Record<SlopeClass, string> = {
-  0: 'Under 5°',
-  1: '5–10°',
-  2: '10–15°',
-  3: '15° and over (blocked)',
+  0: '<5°',
+  1: '5° to <10°',
+  2: '10° to <15°',
+  3: '≥15°',
 };
 
 export function slopeClassOf(slopeDeg: number): SlopeClass {
