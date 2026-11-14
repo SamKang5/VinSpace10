@@ -38,17 +38,23 @@ export function readPublicJson(relativePath: string): unknown {
 /**
  * Static JSON file server over PUBLIC_DIR for fetch-path tests. Unknown
  * paths answer 404. `overrides` replaces the body for a relative path
- * (used to simulate corrupted packages).
+ * (used to simulate corrupted packages); a `null` override simulates a
+ * missing file (always 404).
  */
 export function startStaticServer(
-  overrides: Readonly<Record<string, string>> = {},
+  overrides: Readonly<Record<string, string | null>> = {},
 ): Promise<{ server: Server; port: number }> {
   return new Promise((resolve) => {
     const server = createServer((request, response) => {
       const url = new URL(request.url ?? "/", "http://127.0.0.1");
       const relative = url.pathname.replace(/^\//, "");
-      const override = overrides[relative];
-      if (override !== undefined) {
+      if (Object.prototype.hasOwnProperty.call(overrides, relative)) {
+        const override = overrides[relative];
+        if (override === null) {
+          response.writeHead(404);
+          response.end("not found");
+          return;
+        }
         response.writeHead(200, { "content-type": "application/json" });
         response.end(override);
         return;

@@ -197,6 +197,7 @@ body {
   border: 1px solid rgba(79, 209, 197, 0.6);
   color: var(--accent);
   font-weight: 600;
+  pointer-events: none;
 }
 
 .map-controls {
@@ -235,6 +236,7 @@ body {
   color: var(--text-muted);
   background: rgba(11, 14, 20, 0.8);
   border: 1px solid var(--border);
+  pointer-events: none;
 }
 
 .side-panel {
@@ -350,6 +352,25 @@ body {
 
 .facts li {
   margin: 3px 0;
+}
+
+.integrity-list {
+  margin: 8px 0 0;
+  padding: 0;
+  list-style: none;
+  font-size: 12px;
+}
+
+.integrity-list li {
+  margin: 2px 0;
+}
+
+.integrity-ok {
+  color: var(--ok);
+}
+
+.integrity-fail {
+  color: var(--danger);
 }
 
 .selection {

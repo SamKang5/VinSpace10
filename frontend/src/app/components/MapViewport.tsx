@@ -25,10 +25,9 @@ import {
   type Size,
   type ViewTransform,
 } from "../mapTransform.ts";
+import { MapPointerController } from "../mapPointer.ts";
 import { cellCenterImagePoint, type GridCellRef } from "../selection.ts";
 import type { ImageryMetadata } from "../imagery.ts";
-
-const DRAG_CLICK_THRESHOLD_PX = 4;
 
 export interface MapMarker {
   readonly role: "start" | "goal";
@@ -44,15 +43,23 @@ interface MapViewportProps {
   readonly onImageHover?: (imagePoint: Point | null) => void;
 }
 
-interface DragState {
-  readonly pointerId: number;
-  readonly lastScreen: Point;
-  readonly moved: number;
+/**
+ * True when a pointer press landed on an interactive control inside the
+ * viewport (zoom/reset buttons or any [data-map-control] element). Such
+ * presses must never start map panning or selection: capturing the pointer
+ * here would retarget the button's own pointerup and swallow its click.
+ */
+function isControlTarget(event: React.PointerEvent<HTMLDivElement>): boolean {
+  const target = event.target;
+  return (
+    target instanceof Element &&
+    target.closest("button, [data-map-control]") !== null
+  );
 }
 
 export function MapViewport({ imageUrl, imagery, markers, armedHint, onImageClick, onImageHover }: MapViewportProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const dragRef = useRef<DragState | null>(null);
+  const controllerRef = useRef<MapPointerController>(new MapPointerController());
   const fittedRef = useRef(false);
   const [transform, setTransform] = useState<ViewTransform>({ scale: 1, offsetX: 0, offsetY: 0 });
   const [containerSize, setContainerSize] = useState<Size>({ width: 0, height: 0 });
@@ -118,27 +125,30 @@ export function MapViewport({ imageUrl, imagery, markers, armedHint, onImageClic
     if (event.button !== 0) {
       return;
     }
+    // QA Bug 2 fix: presses on interactive controls must never start a map
+    // gesture or take pointer capture — otherwise the button's own pointerup
+    // is retargeted to the container and its click never fires.
+    if (isControlTarget(event)) {
+      return;
+    }
     const point = screenPointFromEvent(event);
     if (!Number.isFinite(point.x) || !Number.isFinite(point.y)) {
       return;
     }
-    dragRef.current = { pointerId: event.pointerId, lastScreen: point, moved: 0 };
-    setIsPanning(true);
-    event.currentTarget.setPointerCapture(event.pointerId);
+    const controller = controllerRef.current;
+    controller.onPointerDown({ screen: point, pointerId: event.pointerId, targetIsControl: false });
+    if (controller.dragging) {
+      setIsPanning(true);
+      event.currentTarget.setPointerCapture(event.pointerId);
+    }
   };
 
   const onPointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
-    const drag = dragRef.current;
-    if (drag !== null && event.pointerId === drag.pointerId) {
-      const point = screenPointFromEvent(event);
-      const dx = point.x - drag.lastScreen.x;
-      const dy = point.y - drag.lastScreen.y;
-      dragRef.current = {
-        ...drag,
-        lastScreen: point,
-        moved: drag.moved + Math.hypot(dx, dy),
-      };
-      setTransform((current) => panBy(current, dx, dy));
+    const point = screenPointFromEvent(event);
+    const result = controllerRef.current.onPointerMove({ screen: point, pointerId: event.pointerId });
+    const pan = result.pan;
+    if (pan !== null) {
+      setTransform((current) => panBy(current, pan.x, pan.y));
       return;
     }
     if (event.buttons === 0) {
@@ -148,17 +158,24 @@ export function MapViewport({ imageUrl, imagery, markers, armedHint, onImageClic
   };
 
   const finishPointer = (event: React.PointerEvent<HTMLDivElement>, isCancel: boolean) => {
-    const drag = dragRef.current;
-    if (drag === null || event.pointerId !== drag.pointerId) {
-      return;
+    const controller = controllerRef.current;
+    const point = screenPointFromEvent(event);
+    const sample = { screen: point, pointerId: event.pointerId };
+    let clicked = false;
+    if (isCancel) {
+      controller.onPointerCancel(sample);
+    } else {
+      clicked = controller.onPointerUp(sample).clicked;
     }
-    dragRef.current = null;
+    if (controller.dragging) {
+      return; // a different pointer is still mid-gesture
+    }
     setIsPanning(false);
     if (event.currentTarget.hasPointerCapture(event.pointerId)) {
       event.currentTarget.releasePointerCapture(event.pointerId);
     }
-    if (isCancel || drag.moved >= DRAG_CLICK_THRESHOLD_PX) {
-      return; // a pan, not a click
+    if (!clicked) {
+      return; // a pan, not a map-surface click
     }
     const imagePoint = screenToImage(transform, screenPointFromEvent(event));
     if (Number.isFinite(imagePoint.x) && Number.isFinite(imagePoint.y)) {
@@ -234,7 +251,7 @@ export function MapViewport({ imageUrl, imagery, markers, armedHint, onImageClic
 
       {armedHint !== null ? <div className="armed-hint">{armedHint}</div> : null}
 
-      <div className="map-controls">
+      <div className="map-controls" data-map-control="true">
         <button type="button" onClick={() => zoomButton(1.5)} aria-label="Zoom in">
           +
         </button>

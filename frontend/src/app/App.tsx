@@ -13,17 +13,12 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import type { NavigationGridModel } from "../navigationGrid/index.ts";
 import {
-  fetchMarsNavigationGrid,
-  type NavigationGridModel,
-} from "../navigationGrid/index.ts";
-import {
-  expectImageryMatchesGrid,
-  fetchImageryMetadata,
-  verifyImageryPackage,
-  type ImageryMetadata,
-  type IntegrityReport,
-} from "./imagery.ts";
+  loadVerifiedPackages,
+  type PackageVerification,
+} from "./dataVerification.ts";
+import type { ImageryMetadata } from "./imagery.ts";
 import {
   cellCenterImagePoint,
   cellRefFromCell,
@@ -38,7 +33,12 @@ import type { Point } from "./mapTransform.ts";
 type DataState =
   | { readonly status: "loading" }
   | { readonly status: "error"; readonly message: string }
-  | { readonly status: "ready"; readonly model: NavigationGridModel; readonly imagery: ImageryMetadata };
+  | {
+      readonly status: "ready";
+      readonly model: NavigationGridModel;
+      readonly imagery: ImageryMetadata;
+      readonly verification: PackageVerification;
+    };
 
 type ArmMode = "start" | "goal" | null;
 
@@ -57,24 +57,12 @@ export function App() {
   const load = useCallback(() => {
     setDataState({ status: "loading" });
     const run = async (): Promise<void> => {
-      const [model, imagery] = await Promise.all([
-        fetchMarsNavigationGrid(NAVIGATION_BASE),
-        fetchImageryMetadata(IMAGERY_BASE),
-      ]);
-      expectImageryMatchesGrid(imagery, model);
-      const report: IntegrityReport = await verifyImageryPackage(
-        IMAGERY_BASE,
-        imagery,
-        `${NAVIGATION_BASE}/grid_metadata.json`,
-      );
-      if (!report.ok) {
-        const failed = [...report.files, report.navigationCrossLink]
-          .filter((f) => !f.ok)
-          .map((f) => `${f.filename}: ${f.detail}`)
-          .join("; ");
-        throw new Error(`Imagery package integrity check failed — refusing to display. ${failed}`);
-      }
-      setDataState({ status: "ready", model, imagery });
+      // Fail-closed gate: fetches every payload once as bytes, hashes the
+      // exact bytes it parses, compares them with the pinned accepted
+      // package reference AND the served manifests, then runs the loader
+      // and imagery cross-checks. Any failure throws before "ready".
+      const { model, imagery, verification } = await loadVerifiedPackages(NAVIGATION_BASE, IMAGERY_BASE);
+      setDataState({ status: "ready", model, imagery, verification });
     };
     run().catch((cause: unknown) => {
       setDataState({
@@ -118,6 +106,7 @@ export function App() {
     <ReadyApp
       model={dataState.model}
       imagery={dataState.imagery}
+      verification={dataState.verification}
       inspected={inspected}
       hovered={hovered}
       start={start}
@@ -135,6 +124,7 @@ export function App() {
 interface ReadyAppProps {
   readonly model: NavigationGridModel;
   readonly imagery: ImageryMetadata;
+  readonly verification: PackageVerification;
   readonly inspected: CellSelection | null;
   readonly hovered: CellSelection | null;
   readonly start: GridCellRef | null;
@@ -148,7 +138,8 @@ interface ReadyAppProps {
 }
 
 function ReadyApp(props: ReadyAppProps) {
-  const { model, imagery } = props;
+  const { model, imagery, verification } = props;
+  const verifiedCount = verification.checks.filter((c) => c.ok).length;
 
   const handleImageClick = (imagePoint: Point) => {
     const selection = selectCellAtImagePoint(model, imagery, imagePoint);
@@ -236,7 +227,12 @@ function ReadyApp(props: ReadyAppProps) {
           <span className="chip chip-ok">
             Imagery {imagery.width}×{imagery.height} px · {imagery.resolutionProjectedMeters[0]} m/px
           </span>
-          <span className="chip chip-ok">SHA-256 integrity PASS</span>
+          <span
+            className="chip chip-ok"
+            title={`Served bytes verified against the accepted package reference: ${verifiedCount}/${verification.checks.length} payload checks passed, both manifests match, and the grid-metadata cross-link matches.`}
+          >
+            SHA-256 integrity PASS · {verifiedCount}/{verification.checks.length} payloads + 2 manifests
+          </span>
         </div>
       </header>
 
@@ -310,10 +306,19 @@ function ReadyApp(props: ReadyAppProps) {
                 Imagery: <code>{IMAGERY_BASE}</code> — {imagery.image}, 5 m/px, bounds equal to grid bounds,{" "}
                 CRS matches.
               </li>
-              <li>
-                Checksums: imagery manifest + navigation metadata cross-link verified at load; any mismatch refuses to
-                render.
-              </li>
+            </ul>
+            <p className="small">
+              Served bytes are hashed once and parsed from those same bytes, then compared against the pinned accepted
+              package reference and both served manifests. Any mismatch refuses to render.
+            </p>
+            <ul className="integrity-list">
+              {verification.checks.map((check) => (
+                <li key={check.label} className={check.ok ? "integrity-ok" : "integrity-fail"}>
+                  {check.ok ? "✓" : "✕"} {check.label}
+                </li>
+              ))}
+              <li className="integrity-ok">✓ grid-metadata cross-link (imagery ↔ navigation)</li>
+              <li className="integrity-ok">✓ both served manifests match the accepted package reference</li>
             </ul>
           </section>
 

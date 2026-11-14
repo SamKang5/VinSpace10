@@ -11,9 +11,9 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { createHash } from "node:crypto";
 
-import { expectImageryMatchesGrid, parseImageryMetadata, verifyImageryPackage, ImageryValidationError } from "../src/app/imagery.ts";
+import { expectImageryMatchesGrid, parseImageryMetadata, ImageryValidationError } from "../src/app/imagery.ts";
 import { loadMarsNavigationGrid } from "../src/navigationGrid/index.ts";
-import { DATA_DIR, loadRealFixtures, makeImageryFixture, readPublicJson, startStaticServer } from "./helpers.ts";
+import { DATA_DIR, loadRealFixtures, makeImageryFixture, readPublicJson } from "./helpers.ts";
 import { makeGrid, makeMetadata } from "./fixtures.ts";
 
 const { model, imagery } = loadRealFixtures();
@@ -102,53 +102,6 @@ test("expectImageryMatchesGrid accepts the consistent fixture pair and rejects t
   assert.throws(() => expectImageryMatchesGrid(tamperedBounds, fixtureModel), ImageryValidationError);
 });
 
-test("verifyImageryPackage passes over HTTP for the served copy", async () => {
-  const { server, port } = await startStaticServer();
-  try {
-    const base = `http://127.0.0.1:${port}/data/M2_04`;
-    const report = await verifyImageryPackage(base, imagery, `http://127.0.0.1:${port}/data/M2_02/grid_metadata.json`);
-    assert.equal(report.ok, true);
-    assert.equal(report.files.length, 4);
-    for (const file of report.files) {
-      assert.equal(file.ok, true, `${file.filename}: ${file.detail}`);
-    }
-    assert.equal(report.navigationCrossLink.ok, true);
-  } finally {
-    server.close();
-  }
-});
-
-test("verifyImageryPackage fails closed on a corrupted payload", async () => {
-  const corrupted = structuredClone(readPublicJson("data/M2_04/imagery_metadata.json")) as Record<string, unknown>;
-  (corrupted["navigationGrid"] as Record<string, unknown>)["pixelsPerCell"] = [5, 5];
-  const { server, port } = await startStaticServer({
-    "data/M2_04/imagery_metadata.json": JSON.stringify(corrupted),
-  });
-  try {
-    const base = `http://127.0.0.1:${port}/data/M2_04`;
-    const parsed = parseImageryMetadata(corrupted);
-    const report = await verifyImageryPackage(base, parsed, `http://127.0.0.1:${port}/data/M2_02/grid_metadata.json`);
-    assert.equal(report.ok, false);
-    const metadataCheck = report.files.find((f) => f.filename === "imagery_metadata.json");
-    assert.equal(metadataCheck?.ok, false);
-    assert.equal(metadataCheck?.detail, "checksum mismatch");
-  } finally {
-    server.close();
-  }
-});
-
-test("verifyImageryPackage fails when the navigation cross-link is broken", async () => {
-  const tamperedGridMeta = structuredClone(readPublicJson("data/M2_02/grid_metadata.json")) as Record<string, unknown>;
-  (tamperedGridMeta["sourceManifestSha256"] as string) = `${"0".repeat(63)}1`;
-  const { server, port } = await startStaticServer({
-    "data/M2_02/grid_metadata.json": JSON.stringify(tamperedGridMeta),
-  });
-  try {
-    const base = `http://127.0.0.1:${port}/data/M2_04`;
-    const report = await verifyImageryPackage(base, imagery, `http://127.0.0.1:${port}/data/M2_02/grid_metadata.json`);
-    assert.equal(report.navigationCrossLink.ok, false);
-    assert.equal(report.ok, false);
-  } finally {
-    server.close();
-  }
-});
+// Package-level checksum verification scenarios (tampered payloads, manifest
+// replacement, missing/malformed manifests, network failures) live in
+// dataVerification.test.ts, covering the startup gate the app actually uses.

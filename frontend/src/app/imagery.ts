@@ -480,7 +480,14 @@ export function expectImageryMatchesGrid(imagery: ImageryMetadata, model: Naviga
   }
 }
 
-/** Fetch + validate `imagery_metadata.json` from a base URL such as "/data/M2_04". */
+/**
+ * Fetch + validate `imagery_metadata.json` from a base URL such as
+ * "/data/M2_04".
+ *
+ * NOTE: this convenience does NOT verify served bytes against a checksum
+ * manifest. The app startup path uses `dataVerification.loadVerifiedPackages`,
+ * which hashes the exact bytes it parses; use that for anything user-facing.
+ */
 export async function fetchImageryMetadata(baseUrl: string, init?: RequestInit): Promise<ImageryMetadata> {
   const url = `${baseUrl.replace(/\/$/, "")}/imagery_metadata.json`;
   const response = await fetch(url, init);
@@ -494,110 +501,4 @@ export async function fetchImageryMetadata(baseUrl: string, init?: RequestInit):
     throw new Error(`imagery_metadata.json at ${url} is not valid JSON`, { cause });
   }
   return parseImageryMetadata(raw);
-}
-
-/** SHA-256 of bytes via WebCrypto (browser and Node >= 20). */
-export async function sha256Hex(bytes: ArrayBuffer): Promise<string> {
-  const digest = await crypto.subtle.digest("SHA-256", bytes);
-  return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, "0")).join("");
-}
-
-export interface IntegrityCheckResult {
-  readonly filename: string;
-  readonly expectedSha256: string;
-  readonly actualSha256: string | null;
-  readonly ok: boolean;
-  readonly detail: string;
-}
-
-export interface IntegrityReport {
-  readonly ok: boolean;
-  readonly files: readonly IntegrityCheckResult[];
-  readonly navigationCrossLink: IntegrityCheckResult;
-}
-
-async function fetchBytes(url: string): Promise<ArrayBuffer> {
-  const response = await fetch(url);
-  if (!response.ok) {
-    throw new Error(`Failed to fetch ${url}: HTTP ${response.status}`);
-  }
-  return response.arrayBuffer();
-}
-
-/**
- * Verify the served imagery package against its checksums.sha256 manifest
- * (every listed file must exist and match) and verify the navigation
- * cross-link: the served `grid_metadata.json` must hash to
- * `navigationGrid.metadataSha256`. Fails closed on any mismatch or missing
- * file.
- */
-export async function verifyImageryPackage(
-  imageryBaseUrl: string,
-  metadata: ImageryMetadata,
-  navigationGridMetadataUrl: string,
-): Promise<IntegrityReport> {
-  const base = imageryBaseUrl.replace(/\/$/, "");
-  const manifestResponse = await fetch(`${base}/checksums.sha256`);
-  if (!manifestResponse.ok) {
-    throw new Error(`Failed to fetch checksums.sha256 (${base}/checksums.sha256): HTTP ${manifestResponse.status}`);
-  }
-  const manifestText = await manifestResponse.text();
-  const manifest: Array<{ filename: string; sha256: string }> = [];
-  for (const line of manifestText.split(/\r?\n/)) {
-    const match = /^([0-9a-f]{64})\s+(\S+)$/.exec(line.trim());
-    if (match) {
-      manifest.push({ sha256: match[1] as string, filename: match[2] as string });
-    }
-  }
-  if (manifest.length === 0) {
-    throw new Error("checksums.sha256 contained no usable entries");
-  }
-
-  const files: IntegrityCheckResult[] = [];
-  for (const entry of manifest) {
-    try {
-      const actual = await sha256Hex(await fetchBytes(`${base}/${entry.filename}`));
-      files.push({
-        filename: entry.filename,
-        expectedSha256: entry.sha256,
-        actualSha256: actual,
-        ok: actual === entry.sha256,
-        detail: actual === entry.sha256 ? "checksum match" : "checksum mismatch",
-      });
-    } catch (cause) {
-      files.push({
-        filename: entry.filename,
-        expectedSha256: entry.sha256,
-        actualSha256: null,
-        ok: false,
-        detail: `unavailable: ${cause instanceof Error ? cause.message : String(cause)}`,
-      });
-    }
-  }
-
-  let navigationCrossLink: IntegrityCheckResult;
-  try {
-    const actual = await sha256Hex(await fetchBytes(navigationGridMetadataUrl));
-    navigationCrossLink = {
-      filename: "grid_metadata.json (navigationGrid.metadataSha256)",
-      expectedSha256: metadata.navigationGrid.metadataSha256,
-      actualSha256: actual,
-      ok: actual === metadata.navigationGrid.metadataSha256,
-      detail: actual === metadata.navigationGrid.metadataSha256 ? "cross-link match" : "cross-link mismatch",
-    };
-  } catch (cause) {
-    navigationCrossLink = {
-      filename: "grid_metadata.json (navigationGrid.metadataSha256)",
-      expectedSha256: metadata.navigationGrid.metadataSha256,
-      actualSha256: null,
-      ok: false,
-      detail: `unavailable: ${cause instanceof Error ? cause.message : String(cause)}`,
-    };
-  }
-
-  return {
-    ok: files.every((f) => f.ok) && navigationCrossLink.ok,
-    files,
-    navigationCrossLink,
-  };
 }
