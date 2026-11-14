@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MARS NAVIGATOR — QA async-race reproduction</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>
+      // QA error reporter.
+      window.__errors = [];
+      window.addEventListener("error", (e) => window.__errors.push(String((e.error && e.error.stack) || e.message)));
+      // QA race harness (dev server only): React Strict Mode mounts the app
+      // twice (setup -> cleanup -> setup). The interceptor holds the FIRST
+      // mount's navigation grid response and fails the SECOND with HTTP 500
+      // — the exact Codex race. Expected post-fix behaviour: the error stays
+      // visible and releasing the held response changes nothing.
+      window.__qaRace = { navRequests: 0, released: false };
+      (function () {
+        const originalFetch = window.fetch.bind(window);
+        window.__origFetch = originalFetch;
+        window.fetch = async function (input, init) {
+          const url = typeof input === "string" ? input : (input && input.url) || String(input);
+          if (url.includes("/terrain/navigation_grid.bin")) {
+            window.__qaRace.navRequests += 1;
+            const n = window.__qaRace.navRequests;
+            if (n === 1) {
+              return new Promise((resolve) => {
+                window.__qaRace.releaseFirst = function () {
+                  window.__qaRace.released = true;
+                  originalFetch(input, init).then(function (r) {
+                    return r.arrayBuffer();
+                  }).then(function (buffer) {
+                    resolve(new Response(buffer, {
+                      status: 200,
+                      headers: { "content-type": "application/octet-stream" },
+                    }));
+                  });
+                };
+              });
+            }
+            if (n === 2) {
+              return new Response(JSON.stringify({ error: "internal server error" }), {
+                status: 500,
+                headers: { "content-type": "application/json" },
+              });
+            }
+          }
+          return originalFetch(input, init);
+        };
+      })();
+    </script>
+    <script type="module">
+      // Required preamble when loading the app module from a raw public HTML
+      // file (dev server only; @vitejs/plugin-react would otherwise throw).
+      import RefreshRuntime from "/@react-refresh";
+      RefreshRuntime.injectIntoGlobalHook(window);
+      window.$RefreshReg$ = () => {};
+      window.$RefreshSig$ = () => (type) => type;
+      window.__vite_plugin_react_preamble_installed__ = true;
+    </script>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
