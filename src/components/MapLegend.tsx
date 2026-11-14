@@ -30,8 +30,6 @@ export function MapLegend({
 
   return (
     <div className="legend">
-      <h3 className="legend__title">Legend</h3>
-
       <section className="legend__group">
         <h4 className="legend__label">Basemap</h4>
         <p className="legend__text">

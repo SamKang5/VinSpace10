@@ -13,6 +13,9 @@ dist-ssr/
 /public/terrain/navigation_grid.bin
 /public/terrain/grid_metadata.json
 
+# The taste-skill brand script's own build state.
+/.taste-skill/
+
 # The overlay rasters are copied from Data/overlay by the same build step.
 /public/terrain/elevation.bin
 /public/terrain/hazard.bin

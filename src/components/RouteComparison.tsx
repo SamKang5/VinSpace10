@@ -2,26 +2,18 @@
 //
 // Each card takes a live route result and shows the numbers the D08 pipeline
 // produces, so the panel and the map always agree.
+//
+// The two cards are a comparison, so they share one row of labels: each
+// metric reads across, which is the only way to see which route wins.
 
 import type { RouteMode, RouteResult } from '../lib/router';
+import { MODE_COLOR, MODE_LABEL, MODE_ORDER } from '../lib/theme';
 
 export interface RouteComparisonProps {
   results: Partial<Record<RouteMode, RouteResult>>;
   activeMode: RouteMode;
   onSelectMode: (mode: RouteMode) => void;
 }
-
-const MODE_LABEL: Record<RouteMode, string> = {
-  shortest: 'Shortest path',
-  'terrain-aware': 'Terrain-aware path',
-};
-
-const MODE_COLOR: Record<RouteMode, string> = {
-  shortest: '#38bdf8',
-  'terrain-aware': '#fbbf24',
-};
-
-const MODE_ORDER: RouteMode[] = ['shortest', 'terrain-aware'];
 
 const STATUS_TEXT: Record<RouteResult['status'], string> = {
   ok: 'Route found',
@@ -35,6 +27,16 @@ function metres(value: number | null): string {
   if (value >= 1000) return `${(value / 1000).toFixed(2)} km`;
   return `${value.toFixed(0)} m`;
 }
+
+/** The metric rows, in the order the panel reads them. */
+const METRICS: { key: keyof RouteResult; label: string; format: (r: RouteResult) => string }[] = [
+  { key: 'distanceMeters', label: 'Distance', format: (r) => metres(r.distanceMeters) },
+  { key: 'modeledCost', label: 'Modelled cost', format: (r) => (r.modeledCost ?? 0).toFixed(0) },
+  { key: 'meanSlopeDeg', label: 'Mean slope', format: (r) => `${(r.meanSlopeDeg ?? 0).toFixed(1)}°` },
+  { key: 'maxSlopeDeg', label: 'Max slope', format: (r) => `${(r.maxSlopeDeg ?? 0).toFixed(1)}°` },
+  { key: 'cells', label: 'Cells', format: (r) => String(r.cells) },
+  { key: 'computationMs', label: 'Search', format: (r) => `${r.computationMs.toFixed(0)} ms` },
+];
 
 export function RouteComparison({ results, activeMode, onSelectMode }: RouteComparisonProps) {
   if (MODE_ORDER.every((mode) => !results[mode])) {
@@ -77,30 +79,12 @@ export function RouteComparison({ results, activeMode, onSelectMode }: RouteComp
               <p className="card__error">{STATUS_TEXT[result.status]}</p>
             ) : (
               <dl className="card__metrics">
-                <div>
-                  <dt>Distance</dt>
-                  <dd>{metres(result.distanceMeters)}</dd>
-                </div>
-                <div>
-                  <dt>Modelled cost</dt>
-                  <dd>{result.modeledCost!.toFixed(0)}</dd>
-                </div>
-                <div>
-                  <dt>Mean slope</dt>
-                  <dd>{result.meanSlopeDeg!.toFixed(1)}°</dd>
-                </div>
-                <div>
-                  <dt>Max slope</dt>
-                  <dd>{result.maxSlopeDeg!.toFixed(1)}°</dd>
-                </div>
-                <div>
-                  <dt>Cells</dt>
-                  <dd>{result.cells}</dd>
-                </div>
-                <div>
-                  <dt>Search</dt>
-                  <dd>{result.computationMs.toFixed(0)} ms</dd>
-                </div>
+                {METRICS.map((m) => (
+                  <div key={m.key}>
+                    <dt>{m.label}</dt>
+                    <dd>{m.format(result)}</dd>
+                  </div>
+                ))}
               </dl>
             )}
           </article>

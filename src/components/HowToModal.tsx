@@ -12,15 +12,15 @@ export interface HowToModalProps {
 
 const STEPS: { title: string; body: string }[] = [
   {
-    title: '1 · Place the endpoints',
+    title: 'Place the endpoints',
     body: 'Choose Start (A) or End (B), then click the map. Drag to pan and scroll to zoom. The chip shows the picked cell as [row, column].',
   },
   {
-    title: '2 · Calculate the route',
+    title: 'Calculate the route',
     body: 'Press Calculate route. The app runs A* twice on the D07 navigation grid: once for the shortest distance, once weighted by ground friction.',
   },
   {
-    title: '3 · Compare the results',
+    title: 'Compare the results',
     body: 'The two cards report distance, modelled cost, mean and maximum slope. Hover the terrain to read the elevation, slope and friction of any cell.',
   },
 ];
