@@ -2,9 +2,17 @@
  * MARS NAVIGATOR — application shell (M1-02/03/04).
  *
  * Loads the verified M2-02 navigation package and M2-04 imagery package
- * (fail-closed: checksum + metadata cross-validation must pass before the
- * map renders), hosts the interactive map viewport, and manages endpoint
- * selection plus the M5 route-status placeholder.
+ * through the latest-request-wins load controller (fail-closed: checksum +
+ * metadata cross-validation must pass before the map renders), hosts the
+ * interactive map viewport, and manages endpoint selection plus the M5
+ * route-status placeholder.
+ *
+ * Async-race safety: every load attempt runs through VerifiedLoadController,
+ * which assigns a monotonic generation, ignores superseded successes AND
+ * failures, aborts superseded fetches, and owns the verified-Blob-URL
+ * lifecycle (created only for current attempts, revoked on supersede and
+ * dispose). React Strict Mode's setup → cleanup → setup lifecycle and
+ * Retry-clicks-while-pending are both safe by construction.
  *
  * RESEARCH/DEMO DATA — NOT FOR OPERATIONAL MARS NAVIGATION. Friction is a
  * dimensionless research index, not energy, time or safety; data support and
@@ -16,9 +24,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { NavigationGridModel } from "../navigationGrid/index.ts";
 import {
   loadVerifiedPackages,
-  PackageVerificationError,
   type PackageVerification,
 } from "./dataVerification.ts";
+import {
+  VerifiedLoadController,
+  type ControllerState,
+} from "./loadController.ts";
 import type { ImageryMetadata } from "./imagery.ts";
 import {
   cellCenterImagePoint,
@@ -31,15 +42,7 @@ import { routeStatusForSelections } from "../route/contract.ts";
 import { MapViewport, type MapMarker } from "./components/MapViewport.tsx";
 import type { Point } from "./mapTransform.ts";
 
-type DataState =
-  | { readonly status: "loading" }
-  | { readonly status: "error"; readonly message: string }
-  | {
-      readonly status: "ready";
-      readonly model: NavigationGridModel;
-      readonly imagery: ImageryMetadata;
-      readonly verification: PackageVerification;
-    };
+type DataState = ControllerState;
 
 type ArmMode = "start" | "goal" | null;
 
@@ -47,84 +50,54 @@ const NAVIGATION_BASE = "/data/M2_02";
 const IMAGERY_BASE = "/data/M2_04";
 
 export function App() {
-  const [dataState, setDataState] = useState<DataState>({ status: "loading" });
-  const [terrainUrl, setTerrainUrl] = useState<string | null>(null);
-  const previousTerrainUrlRef = useRef<string | null>(null);
+  const [dataState, setDataState] = useState<DataState>({ status: "loading", generation: 0 });
   const [inspected, setInspected] = useState<CellSelection | null>(null);
   const [hovered, setHovered] = useState<CellSelection | null>(null);
   const [start, setStart] = useState<GridCellRef | null>(null);
   const [goal, setGoal] = useState<GridCellRef | null>(null);
   const [armMode, setArmMode] = useState<ArmMode>(null);
 
-  // Revoke a superseded Blob URL only after React has committed the new src,
-  // and revoke the last one on unmount. The currently displayed URL is never
-  // revoked prematurely.
+  // One controller per app lifetime: it owns load generations, the
+  // verified-Blob-URL lifecycle and all stale-result gating.
+  const controllerRef = useRef<VerifiedLoadController | null>(null);
+  if (controllerRef.current === null) {
+    controllerRef.current = new VerifiedLoadController({
+      loadPackages: (signal) => loadVerifiedPackages(NAVIGATION_BASE, IMAGERY_BASE, { signal }),
+      createImageUrl: (terrainImage) =>
+        URL.createObjectURL(new Blob([terrainImage.bytes], { type: terrainImage.mimeType })),
+      decodeImage:
+        typeof createImageBitmap === "function"
+          ? async (bytes, mimeType) => {
+              // Fail closed if the verified PNG cannot decode on this
+              // platform; the controller gates this against staleness.
+              const bitmap = await createImageBitmap(new Blob([bytes], { type: mimeType }));
+              bitmap.close();
+            }
+          : undefined,
+      revokeUrl: (url) => URL.revokeObjectURL(url),
+      onStateChange: (state) => setDataState(state),
+    });
+  }
+
+  // Mount: start the first load. Cleanup: dispose (Strict Mode's
+  // setup → cleanup → setup invalidates attempt 1 and starts attempt 2;
+  // real unmount invalidates everything and revokes the Blob URL).
   useEffect(() => {
-    const previous = previousTerrainUrlRef.current;
-    if (previous !== null && previous !== terrainUrl) {
-      URL.revokeObjectURL(previous);
+    const controller = controllerRef.current;
+    if (controller === null) {
+      throw new Error("load controller missing");
     }
-    previousTerrainUrlRef.current = terrainUrl;
-  }, [terrainUrl]);
-  useEffect(() => {
-    return () => {
-      if (previousTerrainUrlRef.current !== null) {
-        URL.revokeObjectURL(previousTerrainUrlRef.current);
-        previousTerrainUrlRef.current = null;
-      }
-    };
+    controller.start();
+    return () => controller.dispose();
   }, []);
 
-  const load = useCallback(() => {
-    setDataState({ status: "loading" });
-    const run = async (): Promise<void> => {
-      // Fail-closed gate: fetches every payload once as bytes, hashes the
-      // exact bytes it parses, compares them with the pinned accepted
-      // package reference AND the served manifests, then runs the loader
-      // and imagery cross-checks. Any failure throws before "ready".
-      const { model, imagery, verification, terrainImage } = await loadVerifiedPackages(NAVIGATION_BASE, IMAGERY_BASE);
-
-      // The map renders from a Blob URL over the VERIFIED bytes, never from
-      // a re-fetch of the original URL (whose response could differ).
-      const blob = new Blob([terrainImage.bytes], { type: terrainImage.mimeType });
-      // Fail closed if the verified PNG cannot decode on this platform.
-      if (typeof createImageBitmap === "function") {
-        let bitmap: ImageBitmap;
-        try {
-          bitmap = await createImageBitmap(blob);
-        } catch (cause) {
-          throw new PackageVerificationError([
-            `the verified terrain PNG failed to decode: ${cause instanceof Error ? cause.message : String(cause)}`,
-          ]);
-        }
-        bitmap.close();
-      }
-      const url = URL.createObjectURL(blob);
-      setTerrainUrl(url);
-      setDataState({ status: "ready", model, imagery, verification });
-    };
-    run().catch((cause: unknown) => {
-      setDataState({
-        status: "error",
-        message: cause instanceof Error ? cause.message : String(cause),
-      });
-    });
+  const retry = useCallback(() => {
+    controllerRef.current?.start();
   }, []);
 
-  // All hooks must run in the same order on every render — callbacks live
-  // above the early returns below.
   const handleImageDecodeError = useCallback(() => {
-    setDataState({
-      status: "error",
-      message:
-        "The verified terrain image failed to decode in the browser — refusing to render a broken map. " +
-        "Retry to re-verify the packages.",
-    });
+    controllerRef.current?.handleImageDecodeError();
   }, []);
-
-  useEffect(() => {
-    load();
-  }, [load]);
 
   if (dataState.status === "loading") {
     return (
@@ -144,7 +117,7 @@ export function App() {
           <h1>MARS NAVIGATOR</h1>
           <p className="error-title">Data could not be loaded — nothing is displayed rather than guessing.</p>
           <pre className="error-detail">{dataState.message}</pre>
-          <button type="button" className="btn" onClick={load}>
+          <button type="button" className="btn" onClick={retry}>
             Retry
           </button>
         </div>
@@ -157,9 +130,9 @@ export function App() {
       model={dataState.model}
       imagery={dataState.imagery}
       verification={dataState.verification}
-      // Invariant: "ready" is only set together with the Blob URL. If this
-      // ever regressed, the empty src fails the <img> and onError fail-closes.
-      terrainUrl={terrainUrl ?? ""}
+      // Invariant: a "ready" state always carries the Blob URL created from
+      // its own verified bytes.
+      terrainUrl={dataState.terrainUrl}
       onImageError={handleImageDecodeError}
       inspected={inspected}
       hovered={hovered}

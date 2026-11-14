@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>MARS NAVIGATOR — QA race reproduction</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script>
+      // QA error reporter: capture every uncaught error/rejection with stacks.
+      window.__errors = [];
+      window.addEventListener("error", (e) => {
+        window.__errors.push("error: " + ((e.error && e.error.stack) || e.message));
+      });
+      window.addEventListener("unhandledrejection", (e) => {
+        window.__errors.push("rejection: " + String((e.reason && e.reason.stack) || e.reason));
+      });
+    </script>
+    <!--
+      QA harness (dev server only): reproduces the Codex async race.
+      Strict Mode starts load A (held by this interceptor) and load B
+      (HTTP 500). Expected post-fix behaviour: the error remains visible
+      and releasing A later changes nothing. window.__qaRace exposes the
+      release handle and request counters for automation.
+    -->
+    <script>
+      window.__qaRace = { navRequests: 0, released: false };
+      (function () {
+        const originalFetch = window.fetch.bind(window);
+        window.fetch = async function (input, init) {
+          const url = typeof input === "string" ? input : (input && input.url) || String(input);
+          if (url.includes("/data/M2_02/navigation_grid.json")) {
+            window.__qaRace.navRequests += 1;
+            const n = window.__qaRace.navRequests;
+            if (n === 1) {
+              // Load A: held until explicitly released (returns 200 + the
+              // real payload when released).
+              return new Promise((resolve) => {
+                window.__qaRace.releaseFirst = function () {
+                  window.__qaRace.released = true;
+                  return originalFetch(input, init).then(function (r) {
+                    return r.text();
+                  });
+                };
+                window.__qaRace.releaseFirst = (function (inner) {
+                  return function () {
+                    window.__qaRace.released = true;
+                    return inner().then(function (text) {
+                      return new Response(text, {
+                        status: 200,
+                        headers: { "content-type": "application/json" },
+                      });
+                    });
+                  };
+                })(window.__qaRace.releaseFirst);
+              });
+            }
+            if (n === 2) {
+              // Load B: HTTP 500.
+              return new Response(JSON.stringify({ error: "internal server error" }), {
+                status: 500,
+                headers: { "content-type": "application/json" },
+              });
+            }
+          }
+          return originalFetch(input, init);
+        };
+      })();
+    </script>
+    <script type="module">
+      // Required preamble when loading the app module from a raw public HTML
+      // file (dev server only; @vitejs/plugin-react would otherwise throw).
+      import RefreshRuntime from "/@react-refresh";
+      RefreshRuntime.injectIntoGlobalHook(window);
+      window.$RefreshReg$ = () => {};
+      window.$RefreshSig$ = () => (type) => type;
+      window.__vite_plugin_react_preamble_installed__ = true;
+    </script>
+    <script type="module" src="/src/app/main.tsx"></script>
+  </body>
+</html>

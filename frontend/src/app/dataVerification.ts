@@ -94,8 +94,8 @@ export async function sha256Hex(bytes: ArrayBuffer): Promise<string> {
   return Array.from(new Uint8Array(digest), (b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-async function fetchBytes(url: string): Promise<ArrayBuffer> {
-  const response = await fetch(url);
+async function fetchBytes(url: string, signal?: AbortSignal): Promise<ArrayBuffer> {
+  const response = await fetch(url, { signal });
   if (!response.ok) {
     throw new PackageVerificationError([`${url} is unavailable (HTTP ${response.status})`]);
   }
@@ -170,11 +170,16 @@ function expectManifestMatchesAccepted(
 /**
  * Load and verify both packages. Bytes are fetched once, hashed, compared
  * against the pinned accepted reference, and parsed from the same bytes.
+ * An optional AbortSignal cancels in-flight fetches when a newer load
+ * supersedes this attempt (efficiency only — callers must still apply their
+ * own generation checks, which stay authoritative).
  */
 export async function loadVerifiedPackages(
   navigationBase: string,
   imageryBase: string,
+  options: { signal?: AbortSignal } = {},
 ): Promise<VerifiedPackages> {
+  const signal = options.signal;
   const nav = navigationBase.replace(/\/$/, "");
   const img = imageryBase.replace(/\/$/, "");
 
@@ -186,12 +191,12 @@ export async function loadVerifiedPackages(
   // diverge from what was verified).
   const [navGridBytes, navMetaBytes, navManifestText, imgMetaBytes, imgManifestText, pngBytes] =
     await Promise.all([
-      fetchBytes(`${nav}/navigation_grid.json`),
-      fetchBytes(`${nav}/grid_metadata.json`),
-      fetchBytes(`${nav}/checksums.sha256`).then((b) => decodeUtf8(b)),
-      fetchBytes(`${img}/imagery_metadata.json`),
-      fetchBytes(`${img}/checksums.sha256`).then((b) => decodeUtf8(b)),
-      fetchBytes(`${img}/mars_terrain.png`),
+      fetchBytes(`${nav}/navigation_grid.json`, signal),
+      fetchBytes(`${nav}/grid_metadata.json`, signal),
+      fetchBytes(`${nav}/checksums.sha256`, signal).then((b) => decodeUtf8(b)),
+      fetchBytes(`${img}/imagery_metadata.json`, signal),
+      fetchBytes(`${img}/checksums.sha256`, signal).then((b) => decodeUtf8(b)),
+      fetchBytes(`${img}/mars_terrain.png`, signal),
     ]);
 
   const [navGridHash, navMetaHash, imgMetaHash, pngHash] = await Promise.all([
@@ -243,10 +248,10 @@ export async function loadVerifiedPackages(
   // Wave 2: the remaining (documentation) manifest entries — also downloaded
   // and byte-hashed so the 8/8 claim is literal.
   const [navReadmeBytes, navReportBytes, imgReadmeBytes, imgReportBytes] = await Promise.all([
-    fetchBytes(`${nav}/README.md`),
-    fetchBytes(`${nav}/M2_02_export_report.md`),
-    fetchBytes(`${img}/README.md`),
-    fetchBytes(`${img}/M2_04_validation_report.md`),
+    fetchBytes(`${nav}/README.md`, signal),
+    fetchBytes(`${nav}/M2_02_export_report.md`, signal),
+    fetchBytes(`${img}/README.md`, signal),
+    fetchBytes(`${img}/M2_04_validation_report.md`, signal),
   ]);
   const [navReadmeHash, navReportHash, imgReadmeHash, imgReportHash] = await Promise.all([
     sha256Hex(navReadmeBytes),
