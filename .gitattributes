@@ -1,2 +1,5 @@
 # Preserve the published dataset bytes and its SHA-256 checksums on all platforms.
 /Data/navigation/* -text
+
+# The web build of the grid is generated from the JSON export at build time.
+/public/terrain/navigation_grid.bin -text
