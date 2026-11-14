@@ -1,6 +1,6 @@
 # MARS NAVIGATOR — M2-05 data handoff
 
-**Handoff: complete for research/demo use; integration remains conditional.** The verified M2-02 navigation grid is published; the M2-04 image and this handoff are prepared on a local branch and are not yet shared. M1/M5 must serve them together, implement the display/click integration and validate the actual router before claiming an integrated demo. This is not an operational navigation or safety product.
+**Handoff: under review for research/demo use; integration remains conditional.** The verified M2-02 navigation grid is published; the M2-04 image and this handoff are published on the review branch [`data/m2-04-imagery-handoff`](https://github.com/SamKang5/VinSpace10/tree/data/m2-04-imagery-handoff); final M2-05 sign-off remains pending. M1/M5 must serve them together, implement the display/click integration and validate the actual router before claiming an integrated demo. This is not an operational navigation or safety product.
 
 ## Deliverables and access
 
@@ -8,7 +8,7 @@
 - Imagery package: [`Data/imagery/`](../Data/imagery/) — `mars_terrain.png`, `imagery_metadata.json`, `README.md`, `M2_04_validation_report.md`, and `checksums.sha256`. The PNG is a 531,304-byte, losslessly optimized, 1068 × 1068 grayscale + alpha image. It and its metadata must be served or bundled; a filesystem path is not automatically a browser URL.
 - M2-04 reproduction: [`scripts/build_m2_04_imagery.py`](../scripts/build_m2_04_imagery.py) and [`tests/test_m2_04_imagery.py`](../tests/test_m2_04_imagery.py). Building requires the local D07/D08 inputs, GDAL Python bindings, NumPy and Pillow; **consuming the package requires no GIS software**. Each checksum manifest covers four payloads and excludes itself.
 - Original CTX orthomosaic and D07 rasters remain local to the data engineer under `D:\Nasa_Data\`; their source names and hashes are in the package metadata. The optimized image is derived losslessly from the D08 display image, itself bilinearly resampled from the CTX source. Team members do not need the originals to consume the package.
-- M2-03's independently checked coordinate contract is reproduced below. Its generated `reports/M2_03_coordinate_contract.md` is not in this checkout. The `scripts/validate_coordinate_contract.py` validator currently exists as staged workspace work on the M1 checkout, not on the published data branch; bring that validator through its owner's branch if the team needs to regenerate the standalone report. Its reported check compared nine representative and 1,000 seeded random centres to rasterio and checked every grid cost position against D07, with 0 m maximum observed centre discrepancy.
+- The [M2-03 coordinate contract](M2_03_coordinate_contract.md) was regenerated against this grid and D07: nine representative and 1,000 seeded random centres and every cost position passed, with 0 m maximum observed centre discrepancy. The source-dependent validator is not included in this branch.
 
 The M1 loader is present in the shared workspace and published on [`m1-02-navigation-grid-loader`](https://github.com/SamKang5/VinSpace10/tree/m1-02-navigation-grid-loader) at `1903782d4203c41e34d4ba2f1de55f39f23313b2`, which descends from the published navigation branch. The imagery/handoff branch is based on `data/m2-02-export`, so it does **not** contain that loader. Integrate the branches through the team's normal review process; neither branch needs to be merged automatically. The following frontend path examples apply after both branches' files are present.
 
@@ -55,6 +55,8 @@ The M2-04 image uses the same CRS and outer bounds as the grid. Its pixel-corner
 | End | `[35,235]` | 9,580 | `(4587233.250853,1095283.140188)` | `(942,142)` | 1.1645629405975342 |
 
 Both endpoints are supported, unblocked and finite-cost. The prior D08 example route file, available locally at `D:\Nasa_Data\D08_AStar_Routing\examples\route_comparison.json`, has connected shortest and terrain-weighted paths; both were rechecked against M2-02 in the preceding handoff. Endpoint validity is not proof that a newly integrated router finds the same path.
+
+The publication is a review branch. Five attribution findings remain open; see the [publication inventory](PUBLICATION_INVENTORY.md) before final sign-off.
 
 ## Imagery attribution
 
