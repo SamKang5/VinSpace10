@@ -12,10 +12,11 @@
  * separate task (M5) and no route is ever fabricated here.
  */
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { NavigationGridModel } from "../navigationGrid/index.ts";
 import {
   loadVerifiedPackages,
+  PackageVerificationError,
   type PackageVerification,
 } from "./dataVerification.ts";
 import type { ImageryMetadata } from "./imagery.ts";
@@ -44,15 +45,35 @@ type ArmMode = "start" | "goal" | null;
 
 const NAVIGATION_BASE = "/data/M2_02";
 const IMAGERY_BASE = "/data/M2_04";
-const IMAGERY_URL = `${IMAGERY_BASE}/mars_terrain.png`;
 
 export function App() {
   const [dataState, setDataState] = useState<DataState>({ status: "loading" });
+  const [terrainUrl, setTerrainUrl] = useState<string | null>(null);
+  const previousTerrainUrlRef = useRef<string | null>(null);
   const [inspected, setInspected] = useState<CellSelection | null>(null);
   const [hovered, setHovered] = useState<CellSelection | null>(null);
   const [start, setStart] = useState<GridCellRef | null>(null);
   const [goal, setGoal] = useState<GridCellRef | null>(null);
   const [armMode, setArmMode] = useState<ArmMode>(null);
+
+  // Revoke a superseded Blob URL only after React has committed the new src,
+  // and revoke the last one on unmount. The currently displayed URL is never
+  // revoked prematurely.
+  useEffect(() => {
+    const previous = previousTerrainUrlRef.current;
+    if (previous !== null && previous !== terrainUrl) {
+      URL.revokeObjectURL(previous);
+    }
+    previousTerrainUrlRef.current = terrainUrl;
+  }, [terrainUrl]);
+  useEffect(() => {
+    return () => {
+      if (previousTerrainUrlRef.current !== null) {
+        URL.revokeObjectURL(previousTerrainUrlRef.current);
+        previousTerrainUrlRef.current = null;
+      }
+    };
+  }, []);
 
   const load = useCallback(() => {
     setDataState({ status: "loading" });
@@ -61,7 +82,25 @@ export function App() {
       // exact bytes it parses, compares them with the pinned accepted
       // package reference AND the served manifests, then runs the loader
       // and imagery cross-checks. Any failure throws before "ready".
-      const { model, imagery, verification } = await loadVerifiedPackages(NAVIGATION_BASE, IMAGERY_BASE);
+      const { model, imagery, verification, terrainImage } = await loadVerifiedPackages(NAVIGATION_BASE, IMAGERY_BASE);
+
+      // The map renders from a Blob URL over the VERIFIED bytes, never from
+      // a re-fetch of the original URL (whose response could differ).
+      const blob = new Blob([terrainImage.bytes], { type: terrainImage.mimeType });
+      // Fail closed if the verified PNG cannot decode on this platform.
+      if (typeof createImageBitmap === "function") {
+        let bitmap: ImageBitmap;
+        try {
+          bitmap = await createImageBitmap(blob);
+        } catch (cause) {
+          throw new PackageVerificationError([
+            `the verified terrain PNG failed to decode: ${cause instanceof Error ? cause.message : String(cause)}`,
+          ]);
+        }
+        bitmap.close();
+      }
+      const url = URL.createObjectURL(blob);
+      setTerrainUrl(url);
       setDataState({ status: "ready", model, imagery, verification });
     };
     run().catch((cause: unknown) => {
@@ -69,6 +108,17 @@ export function App() {
         status: "error",
         message: cause instanceof Error ? cause.message : String(cause),
       });
+    });
+  }, []);
+
+  // All hooks must run in the same order on every render — callbacks live
+  // above the early returns below.
+  const handleImageDecodeError = useCallback(() => {
+    setDataState({
+      status: "error",
+      message:
+        "The verified terrain image failed to decode in the browser — refusing to render a broken map. " +
+        "Retry to re-verify the packages.",
     });
   }, []);
 
@@ -107,6 +157,10 @@ export function App() {
       model={dataState.model}
       imagery={dataState.imagery}
       verification={dataState.verification}
+      // Invariant: "ready" is only set together with the Blob URL. If this
+      // ever regressed, the empty src fails the <img> and onError fail-closes.
+      terrainUrl={terrainUrl ?? ""}
+      onImageError={handleImageDecodeError}
       inspected={inspected}
       hovered={hovered}
       start={start}
@@ -125,6 +179,9 @@ interface ReadyAppProps {
   readonly model: NavigationGridModel;
   readonly imagery: ImageryMetadata;
   readonly verification: PackageVerification;
+  /** Blob/object URL over the SHA-256-verified PNG bytes (never the origin URL). */
+  readonly terrainUrl: string;
+  readonly onImageError: () => void;
   readonly inspected: CellSelection | null;
   readonly hovered: CellSelection | null;
   readonly start: GridCellRef | null;
@@ -229,21 +286,23 @@ function ReadyApp(props: ReadyAppProps) {
           </span>
           <span
             className="chip chip-ok"
-            title={`Served bytes verified against the accepted package reference: ${verifiedCount}/${verification.checks.length} payload checks passed, both manifests match, and the grid-metadata cross-link matches.`}
+            title={`All ${verification.checks.length} manifest entries were downloaded and SHA-256 byte-verified against the pinned accepted package reference; both served manifests match that reference, and the grid-metadata cross-link matches. The displayed image is rendered from the verified bytes.`}
           >
-            SHA-256 integrity PASS · {verifiedCount}/{verification.checks.length} payloads + 2 manifests
+            SHA-256 integrity PASS · {verifiedCount}/{verification.checks.length} files byte-verified · 2/2 manifests
+            match accepted references
           </span>
         </div>
       </header>
 
       <main className="app-main">
         <MapViewport
-          imageUrl={IMAGERY_URL}
+          imageUrl={props.terrainUrl}
           imagery={imagery}
           markers={markers}
           armedHint={armedHint}
           onImageClick={handleImageClick}
           onImageHover={handleHover}
+          onImageError={props.onImageError}
         />
 
         <aside className="side-panel">
@@ -308,13 +367,14 @@ function ReadyApp(props: ReadyAppProps) {
               </li>
             </ul>
             <p className="small">
-              Served bytes are hashed once and parsed from those same bytes, then compared against the pinned accepted
-              package reference and both served manifests. Any mismatch refuses to render.
+              Every manifest entry is downloaded once and its bytes SHA-256 hashed against the pinned accepted package
+              reference; the grid model and the displayed image are built from those same verified bytes. Any mismatch
+              refuses to render.
             </p>
             <ul className="integrity-list">
               {verification.checks.map((check) => (
                 <li key={check.label} className={check.ok ? "integrity-ok" : "integrity-fail"}>
-                  {check.ok ? "✓" : "✕"} {check.label}
+                  {check.ok ? "✓" : "✕"} {check.label} — {check.detail}
                 </li>
               ))}
               <li className="integrity-ok">✓ grid-metadata cross-link (imagery ↔ navigation)</li>

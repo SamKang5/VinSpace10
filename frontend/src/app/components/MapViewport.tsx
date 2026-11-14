@@ -35,12 +35,15 @@ export interface MapMarker {
 }
 
 interface MapViewportProps {
+  /** Blob/object URL over the SHA-256-verified PNG bytes — never the origin URL. */
   readonly imageUrl: string;
   readonly imagery: ImageryMetadata;
   readonly markers: readonly MapMarker[];
   readonly armedHint: string | null;
   readonly onImageClick: (imagePoint: Point) => void;
   readonly onImageHover?: (imagePoint: Point | null) => void;
+  /** Fail-closed: the verified image bytes failed to decode in the browser. */
+  readonly onImageError?: () => void;
 }
 
 /**
@@ -57,7 +60,7 @@ function isControlTarget(event: React.PointerEvent<HTMLDivElement>): boolean {
   );
 }
 
-export function MapViewport({ imageUrl, imagery, markers, armedHint, onImageClick, onImageHover }: MapViewportProps) {
+export function MapViewport({ imageUrl, imagery, markers, armedHint, onImageClick, onImageHover, onImageError }: MapViewportProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const controllerRef = useRef<MapPointerController>(new MapPointerController());
   const fittedRef = useRef(false);
@@ -226,6 +229,7 @@ export function MapViewport({ imageUrl, imagery, markers, armedHint, onImageClic
           height={imagery.height}
           alt="Mars CTX terrain mosaic over the navigation grid footprint"
           draggable={false}
+          onError={onImageError}
         />
       </div>
 

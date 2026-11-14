@@ -17,6 +17,7 @@ import { join } from "node:path";
 import {
   loadVerifiedPackages,
   parseChecksumManifest,
+  sha256Hex,
   PackageVerificationError,
 } from "../src/app/dataVerification.ts";
 import {
@@ -61,13 +62,40 @@ test("loadVerifiedPackages accepts the untouched served packages and verifies al
     assert.equal(result.model.width, 267);
     assert.equal(result.model.height, 267);
     assert.equal(result.imagery.width, 1068);
-    // Every payload check passed, including BOTH navigation JSON payloads.
+    // Every manifest entry (8 files) is byte-hashed: all checks pass and
+    // every check carries the ACTUAL hashed digest, not a manifest-only
+    // comparison.
+    assert.equal(result.verification.checks.length, 8);
     const labels = result.verification.checks.map((c) => c.label);
-    assert.ok(labels.includes("navigation grid payload"), "navigation_grid.json must be verified");
-    assert.ok(labels.includes("navigation metadata"), "grid_metadata.json must be verified");
+    assert.ok(labels.includes("runtime asset: navigation_grid.json"), "navigation_grid.json must be verified");
+    assert.ok(labels.includes("runtime asset: grid_metadata.json"), "grid_metadata.json must be verified");
+    assert.ok(labels.includes("runtime asset: mars_terrain.png"), "mars_terrain.png must be verified");
+    assert.ok(labels.includes("runtime asset: imagery_metadata.json"), "imagery_metadata.json must be verified");
     for (const check of result.verification.checks) {
       assert.equal(check.ok, true, `${check.label}: ${check.detail}`);
+      assert.notEqual(check.actualSha256, null, `${check.label} must be byte-hashed, not manifest-only`);
     }
+  } finally {
+    server.close();
+  }
+});
+
+test("the returned terrain image bytes are exactly the verified accepted PNG (QA Fix 1)", async () => {
+  const { server, port } = await startStaticServer();
+  try {
+    const result = await loadVerifiedPackages(`http://127.0.0.1:${port}/${NAV}`, `http://127.0.0.1:${port}/${IMG}`);
+    // The gate hands the caller the same byte buffer it hashed. Whatever the
+    // app renders derives from THESE bytes — a different response for any
+    // subsequent request to the original PNG URL is never requested.
+    const digest = await sha256Hex(result.terrainImage.bytes);
+    assert.equal(digest, result.terrainImage.sha256);
+    assert.equal(
+      result.terrainImage.sha256,
+      ACCEPTED_IMAGERY_PACKAGE.manifestEntries["mars_terrain.png"],
+      "verified PNG bytes must hash to the accepted digest",
+    );
+    assert.equal(result.terrainImage.mimeType, "image/png");
+    assert.equal(result.terrainImage.bytes.byteLength, 531_304);
   } finally {
     server.close();
   }
@@ -190,6 +218,27 @@ test("a missing imagery PNG is rejected", async () => {
       (error: unknown) => {
         assert.ok(error instanceof PackageVerificationError);
         assert.match(error.message, /mars_terrain\.png.*HTTP 404/);
+        return true;
+      },
+    );
+  } finally {
+    server.close();
+  }
+});
+
+test("a byte-tampered documentation file (README) is rejected, not manifest-only compared", async () => {
+  // Before this fix, README/report entries were compared against the served
+  // manifest digest only — modified bytes with an unchanged manifest passed.
+  const { server, port } = await startStaticServer({
+    [`${NAV}/README.md`]: "# M2-02 navigation grid — TAMPERED DOCUMENTATION\n",
+  });
+  try {
+    await assert.rejects(
+      () => loadVerifiedPackages(`http://127.0.0.1:${port}/${NAV}`, `http://127.0.0.1:${port}/${IMG}`),
+      (error: unknown) => {
+        assert.ok(error instanceof PackageVerificationError);
+        assert.match(error.message, /README\.md/);
+        assert.match(error.message, /do not match the accepted package digest/);
         return true;
       },
     );

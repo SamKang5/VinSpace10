@@ -12,15 +12,19 @@
  *    pinned accepted manifest in `acceptedPackages.ts` — same file set, same
  *    digests. Replacing both a payload and its manifest therefore fails:
  *    the pinned reference is the trust anchor, not the served manifest.
- * 2. Payload integrity: every payload's actual bytes must hash to its
- *    accepted digest. Both navigation JSON payloads (grid + metadata) and
- *    both imagery payloads (PNG + metadata) are verified, plus package
- *    documentation files.
+ * 2. Payload integrity: ALL EIGHT manifest entries (both navigation JSON
+ *    payloads, the imagery PNG + metadata, and all four documentation files)
+ *    are downloaded and their actual bytes SHA-256 hashed against the
+ *    accepted digests. Nothing is verified by manifest digest alone.
  * 3. Cross-link: the verified `grid_metadata.json` bytes must hash to the
  *    `navigationGrid.metadataSha256` declared inside the verified imagery
  *    metadata.
  * 4. Contract validation: the parsed grid/metadata/imagery go through the
  *    loader and `expectImageryMatchesGrid` exactly as before.
+ *
+ * The verified PNG bytes are returned to the caller: the app renders the
+ * image from a Blob URL over THESE bytes and never re-fetches the original
+ * URL, so the displayed pixels cannot differ from what was verified.
  *
  * Any failure throws `PackageVerificationError`; the app shows its error
  * state and must never render a map or an integrity PASS from unverified
@@ -66,10 +70,23 @@ export interface PackageVerification {
   readonly checks: readonly PackageFileCheck[];
 }
 
+export interface VerifiedTerrainImage {
+  /**
+   * The EXACT PNG bytes that were SHA-256 verified against the accepted
+   * package reference. The app must render the image from these bytes (a
+   * Blob/object URL) and never re-fetch the original URL, whose response
+   * could differ from what was verified.
+   */
+  readonly bytes: ArrayBuffer;
+  readonly sha256: string;
+  readonly mimeType: string;
+}
+
 export interface VerifiedPackages {
   readonly model: NavigationGridModel;
   readonly imagery: ImageryMetadata;
   readonly verification: PackageVerification;
+  readonly terrainImage: VerifiedTerrainImage;
 }
 
 export async function sha256Hex(bytes: ArrayBuffer): Promise<string> {
@@ -164,7 +181,9 @@ export async function loadVerifiedPackages(
   const issues: string[] = [];
   const checks: PackageFileCheck[] = [];
 
-  // Single fetch per payload: hashed bytes are the parsed bytes.
+  // Wave 1: runtime assets + manifests. Each payload is fetched ONCE as
+  // bytes; hashed bytes are the parsed bytes (no second fetch that could
+  // diverge from what was verified).
   const [navGridBytes, navMetaBytes, navManifestText, imgMetaBytes, imgManifestText, pngBytes] =
     await Promise.all([
       fetchBytes(`${nav}/navigation_grid.json`),
@@ -188,7 +207,9 @@ export async function loadVerifiedPackages(
   expectManifestMatchesAccepted(navManifest, ACCEPTED_NAVIGATION_PACKAGE, "M2_02", issues);
   expectManifestMatchesAccepted(imgManifest, ACCEPTED_IMAGERY_PACKAGE, "M2_04", issues);
 
-  // Layer 2: payload bytes vs the pinned accepted digests.
+  // Layer 2: EVERY manifest entry's bytes are downloaded and SHA-256 hashed
+  // against the pinned accepted digests — runtime assets and documentation
+  // alike. A manifest-only comparison is never counted as byte verification.
   const verifyPayload = (
     label: string,
     filename: string,
@@ -205,51 +226,38 @@ export async function loadVerifiedPackages(
       expectedSha256: expected,
       actualSha256,
       ok,
-      detail: ok ? "checksum match" : `checksum mismatch (expected accepted digest ${expected})`,
+      detail: ok
+        ? "bytes downloaded, SHA-256 hashed, matches accepted reference"
+        : `checksum mismatch (expected accepted digest ${expected})`,
     });
     if (!ok) {
       issues.push(`${label}: served ${filename} bytes do not match the accepted package digest`);
     }
   };
 
-  verifyPayload("navigation grid payload", "navigation_grid.json", ACCEPTED_NAVIGATION_PACKAGE, navGridHash);
-  verifyPayload("navigation metadata", "grid_metadata.json", ACCEPTED_NAVIGATION_PACKAGE, navMetaHash);
-  for (const [filename, expected] of Object.entries(ACCEPTED_NAVIGATION_PACKAGE.manifestEntries)) {
-    if (filename === "navigation_grid.json" || filename === "grid_metadata.json") {
-      continue; // payload bytes already verified above
-    }
-    const served = navManifest.get(filename);
-    const ok = served === expected;
-    checks.push({
-      label: `navigation package file ${filename}`,
-      expectedSha256: expected,
-      actualSha256: served ?? null,
-      ok,
-      detail: ok ? "manifest digest matches accepted reference" : "manifest digest differs from accepted reference",
-    });
-    if (!ok) {
-      issues.push(`M2_02: served manifest digest for "${filename}" does not match the accepted reference`);
-    }
-  }
-  verifyPayload("imagery PNG payload", "mars_terrain.png", ACCEPTED_IMAGERY_PACKAGE, pngHash);
-  verifyPayload("imagery metadata payload", "imagery_metadata.json", ACCEPTED_IMAGERY_PACKAGE, imgMetaHash);
-  for (const [filename, expected] of Object.entries(ACCEPTED_IMAGERY_PACKAGE.manifestEntries)) {
-    if (filename === "mars_terrain.png" || filename === "imagery_metadata.json") {
-      continue; // payload bytes already verified above
-    }
-    const served = imgManifest.get(filename);
-    const ok = served === expected;
-    checks.push({
-      label: `imagery package file ${filename}`,
-      expectedSha256: expected,
-      actualSha256: served ?? null,
-      ok,
-      detail: ok ? "manifest digest matches accepted reference" : "manifest digest differs from accepted reference",
-    });
-    if (!ok) {
-      issues.push(`M2_04: served manifest digest for "${filename}" does not match the accepted reference`);
-    }
-  }
+  verifyPayload("runtime asset: navigation_grid.json", "navigation_grid.json", ACCEPTED_NAVIGATION_PACKAGE, navGridHash);
+  verifyPayload("runtime asset: grid_metadata.json", "grid_metadata.json", ACCEPTED_NAVIGATION_PACKAGE, navMetaHash);
+  verifyPayload("runtime asset: mars_terrain.png", "mars_terrain.png", ACCEPTED_IMAGERY_PACKAGE, pngHash);
+  verifyPayload("runtime asset: imagery_metadata.json", "imagery_metadata.json", ACCEPTED_IMAGERY_PACKAGE, imgMetaHash);
+
+  // Wave 2: the remaining (documentation) manifest entries — also downloaded
+  // and byte-hashed so the 8/8 claim is literal.
+  const [navReadmeBytes, navReportBytes, imgReadmeBytes, imgReportBytes] = await Promise.all([
+    fetchBytes(`${nav}/README.md`),
+    fetchBytes(`${nav}/M2_02_export_report.md`),
+    fetchBytes(`${img}/README.md`),
+    fetchBytes(`${img}/M2_04_validation_report.md`),
+  ]);
+  const [navReadmeHash, navReportHash, imgReadmeHash, imgReportHash] = await Promise.all([
+    sha256Hex(navReadmeBytes),
+    sha256Hex(navReportBytes),
+    sha256Hex(imgReadmeBytes),
+    sha256Hex(imgReportBytes),
+  ]);
+  verifyPayload("documentation: M2_02/README.md", "README.md", ACCEPTED_NAVIGATION_PACKAGE, navReadmeHash);
+  verifyPayload("documentation: M2_02/M2_02_export_report.md", "M2_02_export_report.md", ACCEPTED_NAVIGATION_PACKAGE, navReportHash);
+  verifyPayload("documentation: M2_04/README.md", "README.md", ACCEPTED_IMAGERY_PACKAGE, imgReadmeHash);
+  verifyPayload("documentation: M2_04/M2_04_validation_report.md", "M2_04_validation_report.md", ACCEPTED_IMAGERY_PACKAGE, imgReportHash);
 
   if (issues.length > 0) {
     throw new PackageVerificationError(issues);
@@ -293,6 +301,7 @@ export async function loadVerifiedPackages(
     model,
     imagery,
     verification: { ok: true, checks },
+    terrainImage: { bytes: pngBytes, sha256: pngHash, mimeType: "image/png" },
   };
 }
 
