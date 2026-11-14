@@ -13,12 +13,11 @@ export interface TerrainInfoPanelProps {
   size: { width: number; height: number };
   activeMarker: 'A' | 'B' | null;
   onInspect: (cell: GridPoint, place: boolean) => void;
-  inspectionStatus: string;
 }
 
 export function TerrainInfoPanel({
   cell, projected, elevation, slope, cost, slopeClass, excluded, endpoint, size, activeMarker,
-  onInspect, inspectionStatus,
+  onInspect,
 }: TerrainInfoPanelProps) {
   const value = (numeric: number | null, digits: number, unit: string) => (
     <>
@@ -46,7 +45,7 @@ export function TerrainInfoPanel({
         {cell ? <>
           <span>Cell <span className="number">[{cell.join(', ')}]</span></span>
           <span className={excluded ? 'warning' : undefined}>{excluded ?? 'Included in model'}{endpoint ? ' · ' + endpoint : ''}</span>
-        </> : <span>Hover or tap the map, or enter a cell below.</span>}
+        </> : <span>Hover or tap a cell.</span>}
       </div>
       <dl className="inspector__readings">
         <div><dt>Elev</dt><dd>{value(elevation, 1, 'm')}</dd></div>
@@ -70,7 +69,6 @@ export function TerrainInfoPanel({
           </button>
         </div>
       </form>
-      <span className="sr-only" role="status">{inspectionStatus}</span>
     </div>
   );
 }

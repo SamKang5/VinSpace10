@@ -1,5 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Block } from './components/Block';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ControlPanel } from './components/ControlPanel';
 import { HowToModal } from './components/HowToModal';
 import { Icon } from './components/Icon';
@@ -54,29 +53,24 @@ export default function App() {
   const [activeMarker, setActiveMarker] = useState<MarkerSlot | null>(null);
   const [mode, setMode] = useState<RouteMode>('shortest');
   const [results, setResults] = useState<Results>({});
-  const [resultRevision, setResultRevision] = useState(0);
-  const [example, setExample] = useState(false);
-  const [viewRevision, setViewRevision] = useState(0);
   const [calculating, setCalculating] = useState(false);
   const [showSlopeClasses, setShowSlopeClasses] = useState(false);
   const [showElevation, setShowElevation] = useState(false);
   const [hovered, setHovered] = useState<GridPoint | null>(null);
   const [inspected, setInspected] = useState<GridPoint | null>(null);
   const [howToOpen, setHowToOpen] = useState(false);
+  const [inspectorOpen, setInspectorOpen] = useState(false);
+  const [placementError, setPlacementError] = useState<string | null>(null);
+  const inspectorToggle = useRef<HTMLButtonElement>(null);
+  const inspectorClose = useRef<HTMLButtonElement>(null);
+  const layers = useRef<HTMLDetailsElement>(null);
+  const mapCanvas = useRef<HTMLCanvasElement>(null);
 
   const data = loaded?.data ?? null;
 
-  const useExample = useCallback((exampleData: AppData) => {
-    setStart(EXAMPLE_START);
-    setEnd(EXAMPLE_END);
-    setActiveMarker(null);
-    setMode('shortest');
-    setCalculating(false);
-    setResults(compareRoutes(exampleData, EXAMPLE_START, EXAMPLE_END));
-    setExample(true);
-    setResultRevision((value) => value + 1);
-    setViewRevision((value) => value + 1);
-  }, []);
+  useEffect(() => {
+    if (inspectorOpen) inspectorClose.current?.focus({ preventScroll: true });
+  }, [inspectorOpen]);
 
   useEffect(() => {
     const controller = new AbortController();
@@ -93,14 +87,16 @@ export default function App() {
         throw new Error('The CTX orthomosaic could not be loaded or decoded.');
       }
       if (controller.signal.aborted) return;
-      useExample(nextData);
+      setStart(EXAMPLE_START);
+      setEnd(EXAMPLE_END);
+      setCalculating(true);
       setLoaded({ data: nextData, image });
     };
     load().catch((cause: unknown) => {
       if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : String(cause));
     });
     return () => controller.abort();
-  }, [loadAttempt, useExample]);
+  }, [loadAttempt]);
 
   const slopeOverlay = useMemo(
     () => data && buildSlopeOverlay(data.routing.width, data.routing.height, data.hazard),
@@ -113,12 +109,6 @@ export default function App() {
     [data],
   );
 
-  const excluded = useMemo(() => ({
-    A: data && start ? readCell(data, start).excluded : null,
-    B: data && end ? readCell(data, end).excluded : null,
-  }), [data, start, end]);
-  const affectedSlots = (['A', 'B'] as const).filter((slot) => excluded[slot]);
-  const canCalculate = Boolean(start && end && !affectedSlots.length);
   const cell = hovered ?? inspected;
   const cellInfo = data && cell ? readCell(data, cell) : null;
   const endpoint = cell && [matches(cell, start) && 'A', matches(cell, end) && 'B'].filter(Boolean).join(' + ');
@@ -126,23 +116,15 @@ export default function App() {
     setHovered((previous) => matches(previous, point) ? previous : point);
   }, []);
 
-  const calculate = useCallback(() => {
-    if (!data || !canCalculate || calculating) return;
-    setCalculating(true);
-  }, [data, canCalculate, calculating]);
-
   useEffect(() => {
-    if (!calculating || !data || !start || !end || !canCalculate) return;
+    if (!calculating || !data || !start || !end) return;
     let timeout = 0;
     const frame = requestAnimationFrame(() => {
       timeout = window.setTimeout(() => {
         const nextResults = compareRoutes(data, start, end);
-        if (nextResults[mode]?.status !== 'ok') {
-          const firstRoute = MODE_ORDER.find((key) => nextResults[key]?.status === 'ok');
-          if (firstRoute) setMode(firstRoute);
-        }
         setResults(nextResults);
-        setResultRevision((value) => value + 1);
+        setMode((current) => nextResults[current]?.status === 'ok'
+          ? current : MODE_ORDER.find((key) => nextResults[key]?.status === 'ok') ?? current);
         setCalculating(false);
       }, 0);
     });
@@ -150,22 +132,30 @@ export default function App() {
       cancelAnimationFrame(frame);
       window.clearTimeout(timeout);
     };
-  }, [calculating, data, start, end, canCalculate, mode]);
+  }, [calculating, data, start, end]);
 
-  const handleMapClick = useCallback((point: GridPoint) => {
+  const handleMapClick = useCallback((point: GridPoint, slot: MarkerSlot | null = activeMarker) => {
     if (!data) return;
     setInspected(point);
     setHovered(null);
-    if (!activeMarker) return;
+    if (!slot) return;
     const excluded = readCell(data, point).excluded;
-    if (activeMarker === 'A') setStart(point);
+    if (excluded) {
+      setPlacementError(excluded === 'Blocked'
+        ? slot + ' needs a cell below 15°.'
+        : 'No terrain data here. Move ' + slot + ' to another cell.');
+      return;
+    }
+    setPlacementError(null);
+    if (matches(point, slot === 'A' ? start : end)) {
+      if (activeMarker === slot && start && end) setActiveMarker(null);
+      return;
+    }
+    if (slot === 'A') setStart(point);
     else setEnd(point);
     setResults({});
-    setExample(false);
-    setCalculating(false);
-    if (!excluded) {
-      setActiveMarker(activeMarker === 'A' && !end ? 'B' : activeMarker === 'B' && !start ? 'A' : null);
-    }
+    setCalculating(slot === 'A' ? Boolean(end) : Boolean(start));
+    setActiveMarker(slot === 'A' && !end ? 'B' : slot === 'B' && !start ? 'A' : null);
   }, [data, activeMarker, end, start]);
 
   const inspect = useCallback((point: GridPoint, place: boolean) => {
@@ -183,8 +173,9 @@ export default function App() {
     setEnd(null);
     setActiveMarker('A');
     setResults({});
-    setExample(false);
+    setPlacementError(null);
     setCalculating(false);
+    mapCanvas.current?.focus({ preventScroll: true });
   };
 
   const paths = useMemo(() => MODE_ORDER.flatMap((key) => {
@@ -195,21 +186,18 @@ export default function App() {
   }), [results, mode]);
   const markers = useMemo(() => ({ A: start ?? undefined, B: end ?? undefined }), [start, end]);
 
-  const resultCount = paths.length;
   const routeFailure = MODE_ORDER.map((key) => results[key]?.status).find((status) => status && status !== 'ok');
-  const controlStatus = affectedSlots.length
-    ? 'Choose another cell for ' + affectedSlots.join(' and ') + '.'
-    : activeMarker
-      ? 'Select a map cell for ' + (activeMarker === 'A' ? 'Start A.' : 'End B.')
-      : 'Select Start or End to move an endpoint.';
-  const comparisonStatus = calculating ? 'Calculating both routes…'
-    : resultCount === 2 ? (example ? 'D08 reference traverse · Two routes found' : 'Two routes found')
-    : resultCount === 1 ? 'One route found'
+  const controlStatus = activeMarker ? 'Pick a spot for ' + activeMarker + ' on the map.' : 'Drag either pin to move it.';
+  const comparisonStatus = calculating ? 'Finding routes…'
     : routeFailure === 'out_of_bounds' ? 'An endpoint is outside the grid.'
-    : affectedSlots.length || routeFailure === 'blocked_endpoint' ? 'An endpoint is excluded from routing.'
-    : routeFailure === 'no_path' ? 'No route connects these endpoints.'
-    : start && end ? 'Calculate routes to compare this pair.'
-    : 'Place Start A and End B to compare routes.';
+    : routeFailure === 'blocked_endpoint' ? 'An endpoint is excluded from routing.'
+    : routeFailure === 'no_path' ? 'No route connects these points. Move either pin.'
+    : '';
+
+  const closeInspector = () => {
+    setInspectorOpen(false);
+    inspectorToggle.current?.focus();
+  };
 
   const selectedInfo = data && inspected ? readCell(data, inspected) : null;
   const inspectionStatus = selectedInfo && inspected
@@ -221,101 +209,117 @@ export default function App() {
 
   return (
     <div className="app">
-      <a className="skip-link" href="#main">Skip to content</a>
+      <a className="skip-link" href="#main">Skip to map</a>
       <header className="app__head">
         <div className="app__brand">
           <h1>Mars Navigator</h1>
-          <p>Jezero Crater · Western fan</p>
+          <p>Jezero Crater</p>
         </div>
-        <dl className="app__stats" aria-label="Terrain grid">
+        <div className="app__tools">
           {data && <>
-            <div><dt>Grid</dt><dd>{data.metadata.width} × {data.metadata.height}</dd></div>
-            <div><dt>Cell</dt><dd>{data.metadata.resolutionProjectedMeters[0]} <span className="unit">m projected</span></dd></div>
-            <div><dt>CRS</dt><dd>Mars 2000</dd></div>
+            <details className="layers" ref={layers} onToggle={(event) => {
+              if (event.currentTarget.open) setInspectorOpen(false);
+            }} onKeyDown={(event) => {
+              if (event.key === 'Escape' && event.currentTarget.open) {
+                event.currentTarget.open = false;
+                event.currentTarget.querySelector('summary')?.focus();
+              }
+            }}>
+              <summary className="text-action">Layers</summary>
+              <div className="layers__panel">
+                <div className="overlays" role="group" aria-label="Terrain overlays">
+                  <label><input type="checkbox" checked={showSlopeClasses}
+                    onChange={(event) => setShowSlopeClasses(event.target.checked)} />Slope classes</label>
+                  <label><input type="checkbox" checked={showElevation}
+                    onChange={(event) => setShowElevation(event.target.checked)} />Elevation tint</label>
+                </div>
+                <MapLegend elevation={data.overlay.elevation} counts={data.overlay.hazard.counts}
+                  statistics={data.metadata.statistics} metresPerPixel={data.meta.metersPerPx}
+                  areaKm={data.metadata.width * data.metadata.resolutionProjectedMeters[0] / 1000} />
+                <footer className="provenance">
+                  <p>Research prototype. Friction is an uncalibrated, dimensionless slope index
+                    <span className="number"> 1 + (slope in degrees ÷ 10)²</span>. It does not measure energy, speed or safety.
+                    Both modes exclude cells at 15° or steeper. Physical image-to-DEM registration and the DEM vertical datum remain unresolved.</p>
+                  <a href="https://doi.org/10.5066/P9GV1ND3">Terrain source · NASA / USGS</a>
+                </footer>
+              </div>
+            </details>
+            <button type="button" className="text-action" ref={inspectorToggle}
+              aria-expanded={inspectorOpen} aria-controls="cell-inspector" onClick={() => {
+                if (layers.current) layers.current.open = false;
+                setInspectorOpen((open) => !open);
+              }}>Inspect</button>
           </>}
-        </dl>
-        <button type="button" className="btn help-btn" onClick={(event) => {
-          event.currentTarget.focus();
-          setHowToOpen(true);
-        }}>
-          <Icon name="help" />How to use
-        </button>
+          <button type="button" className="icon-btn help-btn" aria-label="How to use" title="How to use"
+            onClick={(event) => {
+              event.currentTarget.focus();
+              setHowToOpen(true);
+            }}><Icon name="help" /></button>
+        </div>
       </header>
 
-      <main className="app__body" id="main" tabIndex={-1}>
+      <main className="app__body" id="main" tabIndex={-1} data-ready={Boolean(data)}>
         <div className="app__map">
           {data && loaded ? (
-            <MapViewer meta={data.meta} image={loaded.image} markers={markers} paths={paths}
-              activeMarker={activeMarker} onCancelPlacement={() => setActiveMarker(null)}
+            <MapViewer canvasRef={mapCanvas} meta={data.meta} image={loaded.image} markers={markers} paths={paths}
+              activeMarker={activeMarker} onCancelPlacement={() => {
+                setActiveMarker(null);
+                setPlacementError(null);
+              }}
               onMapClick={handleMapClick} onHover={onHover}
               onInspect={(point) => inspect(point, false)}
               slopeOverlay={slopeOverlay} elevationOverlay={elevationOverlay}
-              showSlopeClasses={showSlopeClasses} showElevation={showElevation}
-              viewRevision={viewRevision} />
+              showSlopeClasses={showSlopeClasses} showElevation={showElevation} />
           ) : (
             <div className="map-state">
-              <div className="map-state__head">CTX orthomosaic</div>
-              <div className="map-state__body">
-                {error ? (
-                  <div>
-                    <h2 role="alert">Terrain files unavailable</h2>
-                    <p>{error}</p>
-                    <button type="button" className="btn" onClick={() => {
-                      setError(null);
-                      setLoadStatus('Loading navigation grid and terrain rasters…');
-                      setLoadAttempt((value) => value + 1);
-                      document.getElementById('main')?.focus();
-                    }}>Retry terrain load</button>
-                  </div>
-                ) : (
-                  <div className="map-state__loading">
-                    <div className="map-state__skeleton" aria-hidden="true"><i /><i /><i /><i /></div>
-                    <p role="status">{loadStatus}</p>
-                  </div>
-                )}
-              </div>
-              <div className="map-state__foot">Jezero Crater · Western fan</div>
+              {error ? (
+                <div>
+                  <h2 role="alert">Terrain files unavailable</h2>
+                  <p>{error}</p>
+                  <button type="button" className="btn" onClick={() => {
+                    setError(null);
+                    setLoadStatus('Loading navigation grid and terrain rasters…');
+                    setLoadAttempt((value) => value + 1);
+                    document.getElementById('main')?.focus();
+                  }}>Retry terrain load</button>
+                </div>
+              ) : (
+                <div>
+                  <div className="map-state__skeleton" aria-hidden="true"><i /><i /><i /></div>
+                  <p role="status">{loadStatus}</p>
+                </div>
+              )}
             </div>
           )}
+          {data && <aside className="inspect-panel" id="cell-inspector" aria-labelledby="inspect-title"
+            hidden={!inspectorOpen} onKeyDown={(event) => {
+              if (event.key === 'Escape') closeInspector();
+            }}>
+            <header>
+              <h2 id="inspect-title">Cell inspector</h2>
+              <button type="button" className="icon-btn" aria-label="Close inspector" ref={inspectorClose}
+                onClick={closeInspector}><Icon name="close" /></button>
+            </header>
+            <TerrainInfoPanel cell={cell} projected={cellInfo?.projected ?? null}
+              elevation={cellInfo?.elevation ?? null} slope={cellInfo?.slope ?? null} cost={cellInfo?.cost ?? null}
+              slopeClass={cellInfo?.slopeClass ?? null} excluded={cellInfo?.excluded ?? null}
+              endpoint={endpoint || null} size={data.metadata} activeMarker={activeMarker}
+              onInspect={inspect} />
+          </aside>}
+          <span className="sr-only" role="status">{inspectionStatus}</span>
         </div>
 
-        <aside className="app__rail" aria-label="Route tools">
-          <Block title="Route comparison" defaultOpen>
-            {data ? <RouteComparison results={results} activeMode={mode} onSelectMode={setMode}
-              status={comparisonStatus} resultRevision={resultRevision} calculating={calculating} />
-              : <p className="comparison__status">{error ? 'Comparison unavailable.' : 'Waiting for terrain files.'}</p>}
-          </Block>
-          {data && <>
-            <Block title="Endpoints" defaultOpen>
-              <ControlPanel start={start} end={end} activeMarker={activeMarker}
-                onActiveMarkerChange={(slot) => setActiveMarker((current) => current === slot ? null : slot)}
-                onCalculate={calculate} onClear={clear} onUseExample={() => useExample(data)}
-                showSlopeClasses={showSlopeClasses} onShowSlopeClassesChange={setShowSlopeClasses}
-                showElevation={showElevation} onShowElevationChange={setShowElevation}
-                canCalculate={canCalculate} calculating={calculating} excluded={excluded} status={controlStatus} />
-            </Block>
-            <Block title="Cell inspector" defaultOpen>
-              <TerrainInfoPanel cell={cell} projected={cellInfo?.projected ?? null}
-                elevation={cellInfo?.elevation ?? null} slope={cellInfo?.slope ?? null} cost={cellInfo?.cost ?? null}
-                slopeClass={cellInfo?.slopeClass ?? null} excluded={cellInfo?.excluded ?? null}
-                endpoint={endpoint || null} size={data.metadata} activeMarker={activeMarker}
-                onInspect={inspect} inspectionStatus={inspectionStatus} />
-            </Block>
-            <Block title="Terrain key">
-              <MapLegend elevation={data.overlay.elevation} counts={data.overlay.hazard.counts}
-                statistics={data.metadata.statistics} metresPerPixel={data.meta.metersPerPx}
-                areaKm={data.metadata.width * data.metadata.resolutionProjectedMeters[0] / 1000} />
-            </Block>
-          </>}
-          <footer className="provenance">
-            <h2>Model and source</h2>
-            <p>Research prototype. Friction is an uncalibrated, dimensionless slope index
-              <span className="number"> 1 + (slope in degrees ÷ 10)²</span>. It does not measure energy, speed or safety.
-              Both modes exclude cells at <span className="number">15</span>° or steeper. Physical image-to-DEM
-              registration and the DEM vertical datum remain unresolved.</p>
-            <a href="https://doi.org/10.5066/P9GV1ND3">CTX orthomosaic · Fergason et al. 2020 · USGS Astrogeology / NASA MRO</a>
-          </footer>
-        </aside>
+        {data && <div className="route-dock">
+          <ControlPanel start={start} end={end} activeMarker={activeMarker}
+            onActiveMarkerChange={(slot) => {
+              setPlacementError(null);
+              setActiveMarker((current) => current === slot && start && end ? null : slot);
+              mapCanvas.current?.focus({ preventScroll: true });
+            }}
+            onClear={clear} status={controlStatus} error={placementError} />
+          <RouteComparison results={results} activeMode={mode} onSelectMode={setMode}
+            status={comparisonStatus} calculating={calculating} />
+        </div>}
       </main>
       {howToOpen && <HowToModal open={howToOpen} onClose={() => setHowToOpen(false)} />}
     </div>
