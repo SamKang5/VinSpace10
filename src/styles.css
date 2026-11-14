@@ -140,6 +140,47 @@ body {
   pointer-events: none;
 }
 
+.map__legend {
+  position: absolute;
+  left: 16px;
+  top: 16px;
+  margin: 0;
+  padding: 10px 12px;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border-radius: var(--radius);
+  background: rgba(13, 11, 10, 0.78);
+  border: 1px solid var(--line);
+  font-size: 12px;
+  color: var(--muted);
+  pointer-events: none;
+}
+
+.map__legend li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.map__legend li.is-active {
+  color: var(--ink);
+}
+
+.map__swatch {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex: none;
+}
+
+.map__swatch--line {
+  width: 16px;
+  height: 3px;
+  border-radius: 2px;
+}
+
 .map__zoom {
   position: absolute;
   right: 16px;
@@ -351,6 +392,10 @@ body {
 
 .card + .card {
   margin-top: 8px;
+}
+
+.card.is-active {
+  border-color: var(--accent);
 }
 
 .card__title {

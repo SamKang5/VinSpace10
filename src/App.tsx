@@ -60,8 +60,11 @@ export function App() {
         label: MODE_LABEL[m],
         points: routes[m].path,
         color: MODE_COLOR[m],
+        // The selected mode is drawn on top; the other stays visible for
+        // comparison but recedes.
+        active: m === mode,
       }));
-  }, [routes]);
+  }, [routes, mode]);
 
   if (loadError) {
     return (
@@ -187,7 +190,7 @@ export function App() {
               (['shortest', 'terrain-aware'] as RouteMode[]).map((m) => {
                 const r = routes[m];
                 return (
-                  <article key={m} className={`card card--${m}`} data-route-mode={m}>
+                  <article key={m} className={`card card--${m} ${mode === m ? 'is-active' : ''}`} data-route-mode={m}>
                     <h3 className="card__title">
                       <span className="mode__swatch" style={{ background: MODE_COLOR[m] }} aria-hidden="true" />
                       {MODE_LABEL[m]}

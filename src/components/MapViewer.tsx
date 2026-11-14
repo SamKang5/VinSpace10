@@ -17,7 +17,14 @@ export interface MapViewerProps {
   meta: TerrainImageMeta;
   imageUrl: string;
   markers: Partial<Record<MarkerSlot, GridPoint>>;
-  paths: { id: string; label: string; points: GridPoint[]; color: string }[];
+  paths: {
+    id: string;
+    label: string;
+    points: GridPoint[];
+    color: string;
+    /** The selected mode draws on top; the others recede but stay visible. */
+    active: boolean;
+  }[];
   activeMarker: MarkerSlot;
   onMapClick: (point: GridPoint) => void;
 }
@@ -147,19 +154,21 @@ export function MapViewer({
 
       ctx.lineJoin = 'round';
       ctx.lineCap = 'round';
+      ctx.globalAlpha = path.active ? 1 : 0.45;
       ctx.strokeStyle = 'rgba(0, 0, 0, 0.55)';
-      ctx.lineWidth = 5.5;
+      ctx.lineWidth = path.active ? 6 : 4;
       ctx.beginPath();
       ctx.moveTo(pts[0].x, pts[0].y);
       for (let i = 1; i < pts.length; i += 1) ctx.lineTo(pts[i].x, pts[i].y);
       ctx.stroke();
 
       ctx.strokeStyle = path.color;
-      ctx.lineWidth = 3;
+      ctx.lineWidth = path.active ? 3.5 : 2;
       ctx.beginPath();
       ctx.moveTo(pts[0].x, pts[0].y);
       for (let i = 1; i < pts.length; i += 1) ctx.lineTo(pts[i].x, pts[i].y);
       ctx.stroke();
+      ctx.globalAlpha = 1;
     }
 
     // ---- markers ------------------------------------------------------------
@@ -298,6 +307,22 @@ export function MapViewer({
       />
       {!imageReady && <div className="map__loading">Loading Jezero terrain…</div>}
       <div className="map__hint">Click to place {markerLabel}</div>
+      <ul className="map__legend" aria-label="Map legend">
+        <li>
+          <span className="map__swatch" style={{ background: '#38bdf8' }} aria-hidden="true" />
+          Start (A)
+        </li>
+        <li>
+          <span className="map__swatch" style={{ background: '#fb923c' }} aria-hidden="true" />
+          End (B)
+        </li>
+        {paths.map((p) => (
+          <li key={p.id} className={p.active ? 'is-active' : ''}>
+            <span className="map__swatch map__swatch--line" style={{ background: p.color }} aria-hidden="true" />
+            {p.label}
+          </li>
+        ))}
+      </ul>
       <div className="map__zoom">
         <button type="button" onClick={() => zoomBy(1.35)} aria-label="Zoom in">
           +
