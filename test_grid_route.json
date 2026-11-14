@@ -1,0 +1,11 @@
+{
+  "grid": "Wall with one opening",
+  "mode": "shortest_distance",
+  "status": "no_route",
+  "route": null,
+  "metrics": {
+    "distance_m": null,
+    "cost": null,
+    "cost_status": "not_calculated"
+  }
+}
