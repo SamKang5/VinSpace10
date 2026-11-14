@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type KeyboardEvent, type PointerEvent, type RefObject } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties, type KeyboardEvent, type PointerEvent, type RefObject } from 'react';
 import { imagePixelToGrid, gridToImagePixel, type TerrainImageMeta } from '../lib/data';
 import type { GridPoint, RouteMode } from '../lib/router';
-import { MARKER_COLOR } from '../lib/theme';
+import { hitTestRoutes } from '../lib/routeHitTest';
+import { MARKER_COLOR, MODE_COLOR } from '../lib/theme';
 import { Icon } from './Icon';
 
 export type MarkerSlot = 'A' | 'B';
@@ -24,6 +25,7 @@ interface MapViewerProps {
   onMapClick: (point: GridPoint, slot?: MarkerSlot) => void;
   onHover: (point: GridPoint | null) => void;
   onInspect: (point: GridPoint) => void;
+  onSelectRoute: (mode: RouteMode) => void;
   slopeOverlay: HTMLCanvasElement | null;
   elevationOverlay: HTMLCanvasElement | null;
   showSlopeClasses: boolean;
@@ -36,7 +38,7 @@ const ZOOM_STEP = 1.35;
 const ARROWS: Record<string, GridPoint> = { ArrowUp: [-1, 0], ArrowDown: [1, 0], ArrowLeft: [0, -1], ArrowRight: [0, 1] };
 
 export function MapViewer({
-  canvasRef, meta, image, markers, paths, activeMarker, onCancelPlacement, onMapClick, onHover, onInspect,
+  canvasRef, meta, image, markers, paths, activeMarker, onCancelPlacement, onMapClick, onHover, onInspect, onSelectRoute,
   slopeOverlay, elevationOverlay, showSlopeClasses, showElevation,
 }: MapViewerProps) {
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -44,6 +46,8 @@ export function MapViewer({
   const [size, setSize] = useState({ w: 0, h: 0 });
   const [panning, setPanning] = useState(false);
   const [pinUnderPointer, setPinUnderPointer] = useState<MarkerSlot | null>(null);
+  const [routeHint, setRouteHint] = useState<{ id: RouteMode; x: number; y: number } | null>(null);
+  const hoveredRoute = routeHint?.id ?? null;
   const [draggedPin, setDraggedPin] = useState<{ slot: MarkerSlot; point: GridPoint } | null>(null);
   const [keyboardCell, setKeyboardCell] = useState<GridPoint | null>(null);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
@@ -83,6 +87,16 @@ export function MapViewer({
     const zoom = Math.min(size.w / meta.width, size.h / meta.height);
     setView({ cx: meta.width / 2, cy: meta.height / 2, zoom });
   }, [size, meta.width, meta.height, clampView]);
+
+  const screenPaths = useMemo(() => paths.map((path) => ({
+    ...path,
+    points: path.points.map((point) => {
+      const pixel = gridToImagePixel(meta, point);
+      return { x: (pixel.x - view.cx) * view.zoom + size.w / 2, y: (pixel.y - view.cy) * view.zoom + size.h / 2 };
+    }),
+  })), [paths, meta, view, size]);
+
+  useEffect(() => { setRouteHint(null); }, [screenPaths, activeMarker]);
 
   // ---- drawing --------------------------------------------------------------
   useEffect(() => {
@@ -141,24 +155,23 @@ export function MapViewer({
     }
 
     // ---- routes -------------------------------------------------------------
-    // The active route draws last, so it sits on top of the other one.
-    const ordered = [...paths].sort((a, b) => Number(a.active) - Number(b.active));
+    // Hover previews the line above both routes without changing the selected mode.
+    const priority = (path: typeof screenPaths[number]) => path.id === hoveredRoute ? 2 : Number(path.active);
+    const ordered = [...screenPaths].sort((a, b) => priority(a) - priority(b));
 
     for (const path of ordered) {
       if (path.points.length === 0) continue;
-      const pts = path.points.map((p) => {
-        const ip = gridToImagePixel(meta, p);
-        return toCss(ip.x, ip.y);
-      });
+      const pts = path.points;
+      const hovering = path.id === hoveredRoute;
 
       ctx.lineJoin = 'round';
       ctx.lineCap = 'round';
-      ctx.globalAlpha = path.active ? 1 : 0.6;
+      ctx.globalAlpha = hovering || path.active ? 1 : 0.6;
 
       // A dark casing under the line keeps it readable over bright terrain.
       ctx.setLineDash([]);
       ctx.strokeStyle = 'rgba(10, 8, 7, 0.7)';
-      ctx.lineWidth = path.active ? 7 : 5;
+      ctx.lineWidth = hovering ? 10 : path.active ? 7 : 5;
       ctx.beginPath();
       ctx.moveTo(pts[0].x, pts[0].y);
       for (let i = 1; i < pts.length; i += 1) ctx.lineTo(pts[i].x, pts[i].y);
@@ -166,7 +179,7 @@ export function MapViewer({
 
       ctx.setLineDash(path.dashed ? [9, 6] : []);
       ctx.strokeStyle = path.color;
-      ctx.lineWidth = path.active ? 3.5 : 2;
+      ctx.lineWidth = hovering ? 5 : path.active ? 3.5 : 2;
       ctx.beginPath();
       ctx.moveTo(pts[0].x, pts[0].y);
       for (let i = 1; i < pts.length; i += 1) ctx.lineTo(pts[i].x, pts[i].y);
@@ -200,7 +213,7 @@ export function MapViewer({
       ctx.textBaseline = 'middle';
       ctx.fillText(slot, x + (sameCell ? slot === 'A' ? -12 : 12 : 0), y + 0.5);
     }
-  }, [canvasRef, view, size, meta, markers, paths, image, slopeOverlay, elevationOverlay, showSlopeClasses, showElevation, draggedPin]);
+  }, [canvasRef, view, size, meta, markers, screenPaths, hoveredRoute, image, slopeOverlay, elevationOverlay, showSlopeClasses, showElevation, draggedPin]);
 
 
   const imagePoint = useCallback((x: number, y: number) => ({
@@ -242,8 +255,16 @@ export function MapViewer({
     return nextX >= meta.width || nextY >= meta.height ? null : imagePixelToGrid(meta, nextX, nextY);
   };
 
+  const routeAt = (event: PointerEvent<HTMLCanvasElement>) => {
+    if (activeMarker || pinAt(event)) return null;
+    const rect = event.currentTarget.getBoundingClientRect();
+    return hitTestRoutes(screenPaths, { x: event.clientX - rect.left, y: event.clientY - rect.top },
+      event.pointerType === 'touch' ? 18 : 9);
+  };
+
   const clearHover = () => {
     cancelAnimationFrame(hoverFrame.current);
+    setRouteHint(null);
     onHover(null);
   };
 
@@ -251,6 +272,7 @@ export function MapViewer({
 
   const handlePointerDown = (event: PointerEvent<HTMLCanvasElement>) => {
     if (event.button !== 0 || !event.isPrimary) return;
+    clearHover();
     setKeyboardVisible(false);
     event.currentTarget.setPointerCapture(event.pointerId);
     dragRef.current = {
@@ -285,8 +307,13 @@ export function MapViewer({
     if (event.pointerType !== 'touch') {
       setPinUnderPointer(pinAt(event)?.slot ?? null);
       const point = pointFromPointer(event);
+      const route = routeAt(event);
+      const rect = event.currentTarget.getBoundingClientRect();
       cancelAnimationFrame(hoverFrame.current);
-      hoverFrame.current = requestAnimationFrame(() => onHover(point));
+      hoverFrame.current = requestAnimationFrame(() => {
+        setRouteHint(route ? { id: route, x: event.clientX - rect.left, y: event.clientY - rect.top } : null);
+        onHover(point);
+      });
     }
   };
 
@@ -311,6 +338,11 @@ export function MapViewer({
         const point = dragCell(drag.pin.point, dx, dy);
         if (point) onMapClick(point, drag.pin.slot);
       }
+      return;
+    }
+    const selectedRoute = routeAt(event);
+    if (selectedRoute) {
+      onSelectRoute(selectedRoute);
       return;
     }
     const grid = pointFromPointer(event);
@@ -415,7 +447,7 @@ export function MapViewer({
   return (
     <div className="map">
       <div className="map__viewport" ref={wrapRef} data-placing={Boolean(activeMarker)}
-        data-grabbing={panning} data-pin={Boolean(pinUnderPointer)}>
+        data-grabbing={panning} data-pin={Boolean(pinUnderPointer)} data-route={Boolean(hoveredRoute)}>
         <canvas ref={canvasRef} className="map__canvas" tabIndex={0}
           onPointerDown={handlePointerDown} onPointerMove={handlePointerMove}
           onPointerUp={handlePointerUp} onPointerCancel={handlePointerCancel} onLostPointerCapture={handlePointerCancel}
@@ -423,6 +455,15 @@ export function MapViewer({
           onBlur={() => setKeyboardVisible(false)}
           aria-label="Jezero terrain map" aria-describedby="map-keys" />
         <p id="map-keys" className="sr-only">Arrow keys inspect cells. Shift and arrows pan. Plus and minus zoom. Zero fills the view. Enter inspects or places the selected endpoint. Escape cancels placement. Row and column entry is available in Cell inspector.</p>
+        {routeHint && <div className="map__route-hint" key={routeHint.id} aria-hidden="true" style={{
+          left: Math.max(8, Math.min(size.w - 184, routeHint.x + 16)),
+          top: routeHint.y > size.h - 56 ? routeHint.y - 48 : routeHint.y + 16,
+          '--route-colour': MODE_COLOR[routeHint.id],
+        } as CSSProperties}>
+          <span />{paths.find((path) => path.id === routeHint.id)?.active
+            ? (routeHint.id === 'shortest' ? 'Shortest selected' : 'Terrain-aware selected')
+            : (routeHint.id === 'shortest' ? 'Show Shortest' : 'Show Terrain-aware')}
+        </div>}
         {keyboardPixel && <span className="map__cursor" aria-hidden="true" style={{
           left: (keyboardPixel.x - view.cx) * view.zoom + size.w / 2,
           top: (keyboardPixel.y - view.cy) * view.zoom + size.h / 2,
