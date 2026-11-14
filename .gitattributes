@@ -9,3 +9,4 @@
 
 # The web build of the grid is generated from the JSON export at build time.
 /public/terrain/navigation_grid.bin -text
+/public/terrain/ctx-aoi-meta.json text eol=lf

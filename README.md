@@ -70,6 +70,15 @@ routing. Unknowns are never filled or interpolated.
 The browser loads the grid as a 418 KB binary rather than the 1.5 MB JSON.
 `npm run data` regenerates it; it is not tracked in Git.
 
+The app verifies the SHA-256 of each downloaded terrain asset against the
+reviewed pins in `src/lib/terrain-pins.ts` before routing or displaying the
+image. A mismatch stops loading and offers a retry. `npm run data` also checks
+the generated assets against those pins; it never updates them automatically.
+For an intentional data update, independently verify the source packages and
+generated asset hashes, review the corresponding pin changes alongside the
+data changes, and run the integrity tests. The pins assume the application
+bundle itself is trusted and must be updated together with the assets.
+
 ### Terrain image (M1-02)
 
 `public/terrain/ctx-jezero-aoi.png` is the Jezero Crater western fan cropped from
