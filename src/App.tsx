@@ -268,6 +268,7 @@ export default function App() {
               }}
               onMapClick={handleMapClick} onHover={onHover}
               onInspect={(point) => inspect(point, false)}
+              onSelectRoute={setMode}
               slopeOverlay={slopeOverlay} elevationOverlay={elevationOverlay}
               showSlopeClasses={showSlopeClasses} showElevation={showElevation} />
           ) : (

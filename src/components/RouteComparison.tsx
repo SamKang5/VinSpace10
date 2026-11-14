@@ -1,4 +1,4 @@
-import type { CSSProperties } from 'react';
+import { useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
 import type { RouteMode, RouteResult } from '../lib/router';
 import { MODE_COLOR, MODE_DASHED, MODE_ORDER } from '../lib/theme';
 
@@ -17,9 +17,9 @@ const METRICS = [
 ] as const;
 
 const DETAILS = [
-  { key: 'meanSlopeDeg', label: 'Mean slope', unit: '°' },
-  { key: 'maxSlopeDeg', label: 'Max slope', unit: '°' },
-  { key: 'computationMs', label: 'Search', unit: 'ms' },
+  { key: 'meanSlopeDeg', label: 'Mean slope', unit: '°', scale: 1, digits: 1 },
+  { key: 'maxSlopeDeg', label: 'Max slope', unit: '°', scale: 1, digits: 1 },
+  { key: 'computationMs', label: 'Search', unit: 'ms', scale: 1, digits: 0 },
 ] as const;
 
 function RouteSwatch({ mode }: { mode: RouteMode }) {
@@ -31,14 +31,18 @@ function RouteSwatch({ mode }: { mode: RouteMode }) {
   );
 }
 
-function Table({ results, activeMode, onSelectMode, detail }: Omit<RouteComparisonProps, 'status' | 'calculating'> & { detail?: boolean }) {
+function Table({ results, activeMode, onSelectMode, expanded }: Omit<RouteComparisonProps, 'status' | 'calculating'> & { expanded: boolean }) {
+  const metrics = expanded ? [...METRICS, ...DETAILS] : METRICS;
   return (
-    <table className="comparison__table" aria-label={detail ? 'Route details' : 'Route comparison'}>
+    <table id="route-comparison" className="comparison__table" aria-label="Route comparison" data-expanded={expanded}>
       <thead>
         <tr>
-          <th scope="col">{detail ? 'Route' : <span className="sr-only">Route</span>}</th>
-          {(detail ? DETAILS : METRICS).map(({ label, unit }) => (
-            <th key={label} scope="col">{label}{unit && <span className="unit">{unit}</span>}</th>
+          <th scope="col"><span className="sr-only">Route</span></th>
+          {metrics.map(({ key, label, unit }, index) => (
+            <th key={key} scope="col"><span className="comparison__metric" data-detail={index >= METRICS.length}
+              style={{ '--column': index - METRICS.length } as CSSProperties}>
+              {label}{unit && <span className="unit">{unit}</span>}
+            </span></th>
           ))}
         </tr>
       </thead>
@@ -50,19 +54,20 @@ function Table({ results, activeMode, onSelectMode, detail }: Omit<RouteComparis
           return (
             <tr key={mode} data-active={mode === activeMode && ready} style={{ '--route-colour': MODE_COLOR[mode] } as CSSProperties}>
               <th scope="row">
-                {detail ? name : (
-                  <button type="button" className="route-select" disabled={!ready}
-                    aria-pressed={mode === activeMode && ready} title={'Bring ' + name.toLowerCase() + ' to front on the map'}
-                    onClick={() => onSelectMode(mode)}>
-                    <RouteSwatch mode={mode} />{name}
-                  </button>
-                )}
+                <button type="button" className="route-select" disabled={!ready}
+                  aria-pressed={mode === activeMode && ready} title={'Bring ' + name.toLowerCase() + ' to front on the map'}
+                  onClick={() => onSelectMode(mode)}>
+                  <RouteSwatch mode={mode} />{name}
+                </button>
               </th>
-              {detail ? DETAILS.map(({ key }) => (
-                <td className="number" key={key}>{ready ? result[key]?.toFixed(key === 'computationMs' ? 0 : 1) ?? '—' : '—'}</td>
-              )) : METRICS.map(({ key, scale, digits }) => {
+              {metrics.map(({ key, scale, digits }, index) => {
                 const value = ready ? result[key] : null;
-                return <td className="number" key={key} data-cost={key === 'modeledCost'}>{value == null ? '—' : (value / scale).toFixed(digits)}</td>;
+                return <td className="number" key={key} data-cost={key === 'modeledCost'}>
+                  <span className="comparison__metric" data-detail={index >= METRICS.length}
+                    style={{ '--column': index - METRICS.length } as CSSProperties}>
+                    {value == null ? '—' : (value / scale).toFixed(digits)}
+                  </span>
+                </td>;
               })}
             </tr>
           );
@@ -73,7 +78,25 @@ function Table({ results, activeMode, onSelectMode, detail }: Omit<RouteComparis
 }
 
 export function RouteComparison({ results, activeMode, onSelectMode, status, calculating }: RouteComparisonProps) {
+  const [expanded, setExpanded] = useState(false);
+  const sectionRef = useRef<HTMLElement>(null);
+  const previousPositions = useRef(new Map<Element, number>());
   const hasRoute = !calculating && MODE_ORDER.some((mode) => results[mode]?.status === 'ok');
+  useLayoutEffect(() => {
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    // ponytail: native FLIP moves existing values without animating table layout or adding a library.
+    const animations: Animation[] = [];
+    for (const [element, left] of previousPositions.current) {
+      if (element.isConnected) animations.push(element.animate([
+        { transform: `translateX(${left - element.getBoundingClientRect().left}px)` },
+        { transform: 'translateX(0)' },
+      ], { duration: expanded ? 280 : 200, easing: 'cubic-bezier(.2,.75,.2,1)' }));
+    }
+    previousPositions.current.clear();
+    const scroll = sectionRef.current?.querySelector('.comparison__scroll');
+    scroll?.scrollTo({ left: expanded ? scroll.scrollWidth - scroll.clientWidth : 0, behavior: reducedMotion ? 'instant' : 'smooth' });
+    return () => animations.forEach((animation) => animation.cancel());
+  }, [expanded, hasRoute]);
   const readyText = MODE_ORDER.flatMap((mode) => {
     const result = results[mode];
     return result?.status === 'ok'
@@ -82,14 +105,21 @@ export function RouteComparison({ results, activeMode, onSelectMode, status, cal
   }).join('. ');
 
   return (
-    <section className="comparison" aria-label="Route results" data-empty={!hasRoute && !status}>
+    <section ref={sectionRef} className="comparison" aria-label="Route results" data-empty={!hasRoute && !status}>
       <p className={hasRoute ? 'sr-only' : 'comparison__status'} role="status">{hasRoute ? readyText : status}</p>
       {hasRoute && <>
-        <Table results={results} activeMode={activeMode} onSelectMode={onSelectMode} />
-        <details className="comparison__more">
-          <summary className="text-action">More metrics</summary>
-          <Table results={results} activeMode={activeMode} onSelectMode={onSelectMode} detail />
-        </details>
+        <div className="comparison__scroll" role="region" aria-label="Route metrics" tabIndex={0}>
+          <Table results={results} activeMode={activeMode} onSelectMode={onSelectMode} expanded={expanded} />
+        </div>
+        <button type="button" className="text-action comparison__more" aria-expanded={expanded}
+          aria-controls="route-comparison" onClick={() => {
+            if (!window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+              sectionRef.current?.querySelectorAll('.comparison__metric[data-detail="false"]').forEach((element) => {
+                previousPositions.current.set(element, element.getBoundingClientRect().left);
+              });
+            }
+            setExpanded((current) => !current);
+          }}>More metrics</button>
       </>}
     </section>
   );

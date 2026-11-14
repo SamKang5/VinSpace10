@@ -3,7 +3,7 @@ import { Icon } from './Icon';
 
 const STEPS = [
   { title: 'Endpoints', text: 'Drag A or B to move it. To start over, choose New route and pick two spots on the map. Select Start or End to move a pin with a single click or the keyboard.' },
-  { title: 'Compare', text: 'Both routes update when you place or move a pin. Shortest minimises great-circle distance. Terrain-aware minimises friction-weighted distance. Select a route name to bring its line to the front.' },
+  { title: 'Compare', text: 'Routes update when a pin moves. Shortest minimises distance; Terrain-aware minimises friction-weighted distance. Click a line on the map or its name below to select it. More metrics adds columns to the comparison.' },
   { title: 'Inspect', text: 'Open Inspect, then hover or tap a cell to read it. Drag bare terrain to pan and scroll to zoom. With the map focused, arrows move the cell cursor, Shift with arrows pans, and Enter places the selected pin. You can also enter a row and column in Inspect.' },
 ];
 
