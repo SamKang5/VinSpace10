@@ -27,9 +27,14 @@ export interface MapViewerProps {
   }[];
   activeMarker: MarkerSlot;
   onMapClick: (point: GridPoint) => void;
+  /** Reports the cell under the cursor, or null when the cursor leaves the grid. */
+  onHover: (point: GridPoint | null) => void;
   /** Offscreen slope-class raster, drawn over the imagery when enabled. */
   slopeOverlay: HTMLCanvasElement | null;
+  /** Offscreen elevation raster, drawn over the imagery when enabled. */
+  elevationOverlay: HTMLCanvasElement | null;
   showSlopeClasses: boolean;
+  showElevation: boolean;
 }
 
 const MIN_ZOOM = 0.6;
@@ -42,8 +47,11 @@ export function MapViewer({
   paths,
   activeMarker,
   onMapClick,
+  onHover,
   slopeOverlay,
+  elevationOverlay,
   showSlopeClasses,
+  showElevation,
 }: MapViewerProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
@@ -130,7 +138,12 @@ export function MapViewer({
     const origin = toCss(0, 0);
     ctx.drawImage(img, origin.x, origin.y, meta.width * zoom, meta.height * zoom);
 
-    // ---- slope classes -------------------------------------------------------
+    // ---- overlays -----------------------------------------------------------
+    if (showElevation && elevationOverlay) {
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(elevationOverlay, origin.x, origin.y, meta.width * zoom, meta.height * zoom);
+      ctx.imageSmoothingEnabled = zoom < 2;
+    }
     if (showSlopeClasses && slopeOverlay) {
       ctx.imageSmoothingEnabled = false;
       ctx.drawImage(slopeOverlay, origin.x, origin.y, meta.width * zoom, meta.height * zoom);
@@ -205,7 +218,7 @@ export function MapViewer({
       ctx.textBaseline = 'middle';
       ctx.fillText(slot, x, y + 0.5);
     }
-  }, [view, size, meta, markers, paths, imageReady, slopeOverlay, showSlopeClasses]);
+  }, [view, size, meta, markers, paths, imageReady, slopeOverlay, elevationOverlay, showSlopeClasses, showElevation]);
 
   // ---- pointer interaction --------------------------------------------------
   const imagePointFromEvent = useCallback(
@@ -233,6 +246,9 @@ export function MapViewer({
   };
 
   const handlePointerMove = (e: React.PointerEvent<HTMLCanvasElement>) => {
+    const p = imagePointFromEvent(e.clientX, e.clientY);
+    onHover(imagePixelToGrid(meta, p.x, p.y));
+
     const drag = dragRef.current;
     if (!drag) return;
     const dx = e.clientX - drag.x;
@@ -242,6 +258,10 @@ export function MapViewer({
       userAdjustedRef.current = true;
     }
     setView((v) => clampView({ ...v, cx: drag.cx - dx / v.zoom, cy: drag.cy - dy / v.zoom }));
+  };
+
+  const handlePointerLeave = () => {
+    onHover(null);
   };
 
   const handlePointerUp = (e: React.PointerEvent<HTMLCanvasElement>) => {
@@ -314,6 +334,7 @@ export function MapViewer({
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerUp}
+        onPointerLeave={handlePointerLeave}
         onWheel={handleWheel}
         aria-label="Mars terrain map. Drag to pan, scroll to zoom, click to place the selected marker."
       />

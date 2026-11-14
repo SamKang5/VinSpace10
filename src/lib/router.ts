@@ -179,6 +179,9 @@ export function route(
   end: GridPoint,
   mode: RouteMode = 'shortest',
 ): RouteResult {
+  if (mode !== 'shortest' && mode !== 'terrain-aware') {
+    throw new Error(`mode must be shortest or terrain-aware, got ${String(mode)}`);
+  }
   const startedAt = performance.now();
   const { width, height } = grid;
   const size = width * height;

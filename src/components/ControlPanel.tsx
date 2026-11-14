@@ -18,6 +18,8 @@ export interface ControlPanelProps {
   onUseExample: () => void;
   showSlopeClasses: boolean;
   onShowSlopeClassesChange: (show: boolean) => void;
+  showElevation: boolean;
+  onShowElevationChange: (show: boolean) => void;
   canCalculate: boolean;
 }
 
@@ -43,6 +45,8 @@ export function ControlPanel({
   onUseExample,
   showSlopeClasses,
   onShowSlopeClassesChange,
+  showElevation,
+  onShowElevationChange,
   canCalculate,
 }: ControlPanelProps) {
   const active = activeMarker === 'A' ? start : end;
@@ -130,27 +134,22 @@ export function ControlPanel({
         <label className="toggle">
           <input
             type="checkbox"
+            checked={showElevation}
+            onChange={(event) => onShowElevationChange(event.target.checked)}
+          />
+          <span>Show elevation tint</span>
+        </label>
+        <label className="toggle">
+          <input
+            type="checkbox"
             checked={showSlopeClasses}
             onChange={(event) => onShowSlopeClassesChange(event.target.checked)}
           />
           <span>Show slope classes</span>
         </label>
-        <ul className="slope-legend">
-          <li>
-            <span className="slope-legend__chip slope-legend__chip--s1" aria-hidden="true" />
-            5–10°
-          </li>
-          <li>
-            <span className="slope-legend__chip slope-legend__chip--s2" aria-hidden="true" />
-            10–15°
-          </li>
-          <li>
-            <span className="slope-legend__chip slope-legend__chip--s3" aria-hidden="true" />
-            ≥15° blocked
-          </li>
-        </ul>
         <p className="panel__note">
-          Slope classes are an illustrative research threshold, not safety zones.
+          Slope classes are an illustrative research threshold, not safety zones. The legend
+          explains every colour.
         </p>
       </div>
     </>

@@ -9,6 +9,11 @@ dist-ssr/
 /public/terrain/navigation_grid.bin
 /public/terrain/grid_metadata.json
 
+# The overlay rasters are copied from Data/overlay by the same build step.
+/public/terrain/elevation.bin
+/public/terrain/hazard.bin
+/public/terrain/overlay_metadata.json
+
 # Editors
 .vscode/*
 !.vscode/extensions.json

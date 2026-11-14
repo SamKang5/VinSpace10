@@ -33,12 +33,37 @@ export interface TerrainImageMeta {
   source: Record<string, string>;
 }
 
+export interface OverlayMeta {
+  schemaVersion: string;
+  width: number;
+  height: number;
+  layout: string;
+  bounds: [number, number, number, number];
+  geotransform: number[];
+  arrays: string;
+  elevation: {
+    min: number;
+    max: number;
+    unit: string;
+    datum: string;
+  };
+  hazard: {
+    edges: number[];
+    counts: number[];
+  };
+}
+
 export interface AppData {
   /** The published grid metadata (CRS, affine, bounds, statistics, limits). */
   metadata: GridMetadata;
   /** The arrays the router needs, decoded from the binary. */
   routing: RoutingGrid;
   meta: TerrainImageMeta;
+  /** The D07 elevation raster, in metres. */
+  elevation: Float32Array;
+  /** The D07 slope-class raster: 0 below 5 deg, 1 up to 10, 2 up to 15, 3 blocked. */
+  hazard: Uint8Array;
+  overlay: OverlayMeta;
 }
 
 /**
@@ -51,6 +76,9 @@ export const DATA_URLS = {
   grid: `${import.meta.env?.BASE_URL ?? './'}terrain/navigation_grid.bin`,
   gridMetadata: `${import.meta.env?.BASE_URL ?? './'}terrain/grid_metadata.json`,
   meta: `${import.meta.env?.BASE_URL ?? './'}terrain/ctx-aoi-meta.json`,
+  elevation: `${import.meta.env?.BASE_URL ?? './'}terrain/elevation.bin`,
+  hazard: `${import.meta.env?.BASE_URL ?? './'}terrain/hazard.bin`,
+  overlayMetadata: `${import.meta.env?.BASE_URL ?? './'}terrain/overlay_metadata.json`,
 } as const;
 
 /** Decode the binary grid produced by scripts/build-grid-bin.mjs. */
@@ -93,16 +121,22 @@ export function decodeGrid(buffer: ArrayBuffer): {
  * disagree and the app must not route over it.
  */
 export async function loadAppData(signal?: AbortSignal): Promise<AppData> {
-  const [binRes, metaRes, gridMetadataRes] = await Promise.all([
+  const [binRes, metaRes, gridMetadataRes, elevationRes, hazardRes, overlayRes] = await Promise.all([
     fetch(DATA_URLS.grid, { signal }),
     fetch(DATA_URLS.meta, { signal }),
     fetch(DATA_URLS.gridMetadata, { signal }),
+    fetch(DATA_URLS.elevation, { signal }),
+    fetch(DATA_URLS.hazard, { signal }),
+    fetch(DATA_URLS.overlayMetadata, { signal }),
   ]);
   if (!binRes.ok) throw new Error(`navigation grid failed to load (${binRes.status})`);
   if (!metaRes.ok) throw new Error(`terrain metadata failed to load (${metaRes.status})`);
   if (!gridMetadataRes.ok) {
     throw new Error(`grid metadata failed to load (${gridMetadataRes.status})`);
   }
+  if (!elevationRes.ok) throw new Error(`elevation raster failed to load (${elevationRes.status})`);
+  if (!hazardRes.ok) throw new Error(`hazard raster failed to load (${hazardRes.status})`);
+  if (!overlayRes.ok) throw new Error(`overlay metadata failed to load (${overlayRes.status})`);
 
   const metadata = parseGridMetadata(await gridMetadataRes.json());
   const decoded = decodeGrid(await binRes.arrayBuffer());
@@ -130,6 +164,39 @@ export async function loadAppData(signal?: AbortSignal): Promise<AppData> {
   }
 
   const meta = (await metaRes.json()) as TerrainImageMeta;
+  const overlay = (await overlayRes.json()) as OverlayMeta;
+
+  // The overlay rasters are the same grid frame as the navigation grid, so a
+  // size mismatch means they belong to a different export.
+  const elevationBytes = await elevationRes.arrayBuffer();
+  const hazardBytes = await hazardRes.arrayBuffer();
+  const cellCount = decoded.width * decoded.height;
+  if (elevationBytes.byteLength !== cellCount * 4) {
+    throw new Error(
+      `elevation raster is ${elevationBytes.byteLength} bytes but the grid has ${cellCount} cells`,
+    );
+  }
+  if (hazardBytes.byteLength !== cellCount) {
+    throw new Error(
+      `hazard raster is ${hazardBytes.byteLength} bytes but the grid has ${cellCount} cells`,
+    );
+  }
+
+  const elevation = new Float32Array(elevationBytes);
+  const hazard = new Uint8Array(hazardBytes);
+
+  // The hazard class 3 is the blocked set, so it must match the grid's
+  // NoData cells exactly. A disagreement means the overlay and the router
+  // would disagree about which ground can be crossed.
+  let classMismatch = 0;
+  for (let i = 0; i < cellCount; i += 1) {
+    if ((hazard[i] === 3) !== (decoded.cost[i] === NODATA)) classMismatch += 1;
+  }
+  if (classMismatch > 0) {
+    throw new Error(
+      `hazard classes disagree with the navigation grid on ${classMismatch} cells`,
+    );
+  }
 
   return {
     metadata,
@@ -141,6 +208,9 @@ export async function loadAppData(signal?: AbortSignal): Promise<AppData> {
       mask: decoded.mask,
     },
     meta,
+    elevation,
+    hazard,
+    overlay,
   };
 }
 

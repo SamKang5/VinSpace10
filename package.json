@@ -10,7 +10,7 @@
     "preview": "vite preview",
     "typecheck": "tsc -b --noEmit",
     "check": "npm run data && node --experimental-strip-types scripts/check-routing.mts && node --experimental-strip-types --test tests/*.test.ts",
-    "data": "node scripts/build-grid-bin.mjs Data/navigation/navigation_grid.json public/terrain/navigation_grid.bin Data/navigation/grid_metadata.json public/terrain/grid_metadata.json"
+    "data": "node scripts/build-grid-bin.mjs Data/navigation/navigation_grid.json public/terrain/navigation_grid.bin Data/navigation/grid_metadata.json public/terrain/grid_metadata.json && node scripts/build-overlay-bins.mjs Data/navigation/navigation_grid.json Data/overlay public/terrain"
   },
   "dependencies": {
     "react": "^18.3.1",

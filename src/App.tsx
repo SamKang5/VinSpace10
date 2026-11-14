@@ -2,9 +2,19 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { MapViewer, type MarkerSlot } from './components/MapViewer';
 import { ControlPanel } from './components/ControlPanel';
 import { RouteComparison } from './components/RouteComparison';
+import { MapLegend } from './components/MapLegend';
+import { TerrainInfoPanel } from './components/TerrainInfoPanel';
+import { HowToModal } from './components/HowToModal';
 import { loadAppData, type AppData } from './lib/data';
-import { buildSlopeOverlay } from './lib/overlay';
-import { route, type GridPoint, type RouteMode, type RouteResult } from './lib/router';
+import {
+  buildElevationOverlay,
+  buildSlopeOverlay,
+  slopeClassOf,
+  SLOPE_CLASS_LABELS,
+  type SlopeClass,
+} from './lib/overlay';
+import { cellToProjected } from './lib/geo';
+import { NODATA, route, type GridPoint, type RouteMode, type RouteResult } from './lib/router';
 
 /** The D08 example pair: a long traverse across the western fan. */
 const EXAMPLE_START: GridPoint = [230, 30];
@@ -20,6 +30,13 @@ const MODE_LABEL: Record<RouteMode, string> = {
   'terrain-aware': 'Terrain-aware path',
 };
 
+/** The legend swatches, in class order. */
+const LEGEND_CLASS_COLORS = [
+  'rgba(230, 195, 90, 0.55)',
+  'rgba(242, 132, 59, 0.7)',
+  'rgba(242, 68, 45, 0.85)',
+];
+
 export default function App() {
   const [data, setData] = useState<AppData | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -29,6 +46,9 @@ export default function App() {
   const [mode, setMode] = useState<RouteMode>('shortest');
   const [results, setResults] = useState<Partial<Record<RouteMode, RouteResult>>>({});
   const [showSlopeClasses, setShowSlopeClasses] = useState(false);
+  const [showElevation, setShowElevation] = useState(false);
+  const [hovered, setHovered] = useState<GridPoint | null>(null);
+  const [howToOpen, setHowToOpen] = useState(false);
 
   // ---- data loading --------------------------------------------------------
   useEffect(() => {
@@ -42,7 +62,48 @@ export default function App() {
     return () => controller.abort();
   }, []);
 
-  const slopeOverlay = useMemo(() => (data ? buildSlopeOverlay(data.routing) : null), [data]);
+  const slopeOverlay = useMemo(
+    () => (data ? buildSlopeOverlay(data.routing.width, data.routing.height, data.hazard) : null),
+    [data],
+  );
+
+  const elevationOverlay = useMemo(
+    () =>
+      data
+        ? buildElevationOverlay(
+            data.routing.width,
+            data.routing.height,
+            data.elevation,
+            data.overlay.elevation.min,
+            data.overlay.elevation.max,
+          )
+        : null,
+    [data],
+  );
+
+  /** What is under the cursor, read from the rasters the app already holds. */
+  const hoveredInfo = useMemo(() => {
+    if (!data || !hovered) return null;
+    const index = hovered[0] * data.routing.width + hovered[1];
+    const cost = data.routing.cost[index];
+    const blocked = cost === NODATA;
+    const slope = blocked ? null : data.routing.slope[index];
+    return {
+      cell: hovered as [number, number],
+      projected: cellToProjected(hovered[0], hovered[1]),
+      elevation: data.elevation[index],
+      slope,
+      cost: blocked ? null : cost,
+      slopeClass: SLOPE_CLASS_LABELS[slopeClassOf(slope ?? Number.NaN)],
+      blocked,
+      endpoint:
+        (start && start[0] === hovered[0] && start[1] === hovered[1]
+          ? 'A'
+          : end && end[0] === hovered[0] && end[1] === hovered[1]
+            ? 'B'
+            : null) as 'A' | 'B' | null,
+    };
+  }, [data, hovered, start, end]);
 
   // ---- routing -------------------------------------------------------------
   const calculate = useCallback(() => {
@@ -144,6 +205,9 @@ export default function App() {
             <dt>CRS</dt>
             <dd>Mars 2000</dd>
           </div>
+          <button type="button" className="btn btn--ghost" onClick={() => setHowToOpen(true)}>
+            How to use
+          </button>
         </dl>
       </header>
 
@@ -156,8 +220,11 @@ export default function App() {
             paths={paths}
             activeMarker={activeMarker}
             onMapClick={handleMapClick}
+            onHover={setHovered}
             slopeOverlay={slopeOverlay}
+            elevationOverlay={elevationOverlay}
             showSlopeClasses={showSlopeClasses}
+            showElevation={showElevation}
           />
         </section>
 
@@ -176,6 +243,8 @@ export default function App() {
               onUseExample={useExample}
               showSlopeClasses={showSlopeClasses}
               onShowSlopeClassesChange={setShowSlopeClasses}
+              showElevation={showElevation}
+              onShowElevationChange={setShowElevation}
               canCalculate={Boolean(start && end)}
             />
           </div>
@@ -183,6 +252,39 @@ export default function App() {
           <div className="panel__block" data-m4-slot="route-comparison-cards">
             <h2 className="panel__heading">02 · Comparison</h2>
             <RouteComparison results={results} activeMode={mode} onSelectMode={setMode} />
+          </div>
+
+          <div className="panel__block" data-r03-slot="terrain-info">
+            <TerrainInfoPanel
+              cell={hoveredInfo?.cell ?? null}
+              projected={hoveredInfo?.projected ?? null}
+              elevation={hoveredInfo?.elevation ?? null}
+              slope={hoveredInfo?.slope ?? null}
+              cost={hoveredInfo?.cost ?? null}
+              slopeClass={hoveredInfo?.slopeClass ?? null}
+              blocked={hoveredInfo?.blocked ?? false}
+              endpoint={hoveredInfo?.endpoint ?? null}
+            />
+          </div>
+
+          <div className="panel__block" data-r01-slot="map-legend">
+            <MapLegend
+              elevation={{
+                min: data.overlay.elevation.min,
+                max: data.overlay.elevation.max,
+                unit: data.overlay.elevation.unit,
+              }}
+              slopeClasses={LEGEND_CLASS_COLORS.map((color, i) => ({
+                label: SLOPE_CLASS_LABELS[(i + 1) as SlopeClass],
+                color,
+              }))}
+              costPolicy="Friction index = 1 + (slope ÷ 10)². The terrain-aware route minimises distance weighted by this index."
+              traversability={{
+                traversable: metadata.statistics.finiteCost,
+                blocked: metadata.statistics.blocked,
+                total: metadata.statistics.total,
+              }}
+            />
           </div>
         </aside>
       </main>
@@ -195,6 +297,8 @@ export default function App() {
           traversability.
         </p>
       </footer>
+
+      <HowToModal open={howToOpen} onClose={() => setHowToOpen(false)} />
     </div>
   );
 }
