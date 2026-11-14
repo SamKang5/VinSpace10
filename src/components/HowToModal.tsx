@@ -2,9 +2,9 @@ import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { Icon } from './Icon';
 
 const STEPS = [
-  { title: 'Endpoints', text: 'Select Start A or End B, then click or tap a map cell. After you place A, B is selected if it is unset. Use Clear to start a new pair, or D08 example to restore the reference traverse.' },
-  { title: 'Compare', text: 'Calculate routes runs both searches. Shortest minimises great-circle distance. Terrain-aware minimises distance weighted by mean edge friction. Select a column heading to bring that route to the front.' },
-  { title: 'Inspect', text: 'Hover or tap to inspect. Drag to pan, scroll to zoom, and use Fill view to reset. With the map focused, use arrow keys to inspect, Shift with arrows to pan, and Enter to place the selected endpoint. You can also enter a row and column in Cell inspector.' },
+  { title: 'Endpoints', text: 'Drag A or B to move it. To start over, choose New route and pick two spots on the map. Select Start or End to move a pin with a single click or the keyboard.' },
+  { title: 'Compare', text: 'Both routes update when you place or move a pin. Shortest minimises great-circle distance. Terrain-aware minimises friction-weighted distance. Select a route name to bring its line to the front.' },
+  { title: 'Inspect', text: 'Open Inspect, then hover or tap a cell to read it. Drag bare terrain to pan and scroll to zoom. With the map focused, arrows move the cell cursor, Shift with arrows pans, and Enter places the selected pin. You can also enter a row and column in Inspect.' },
 ];
 
 export function HowToModal({ open, onClose }: { open: boolean; onClose: () => void }) {

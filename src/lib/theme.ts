@@ -26,8 +26,8 @@ export const MODE_LABEL: Record<RouteMode, string> = {
 
 /** The endpoint markers, on the map and in the panel. */
 export const MARKER_COLOR: Record<'A' | 'B', string> = {
-  A: '#f4efe6',
-  B: '#f4efe6',
+  A: '#38bdf8',
+  B: '#fb923c',
 };
 
 export const MODE_ORDER: RouteMode[] = ['shortest', 'terrain-aware'];
