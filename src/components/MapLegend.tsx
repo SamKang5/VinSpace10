@@ -1,76 +1,40 @@
-// Map legend (R01).
-//
-// The legend explains what the map colours mean: the CTX basemap, the
-// elevation tint, the slope classes, the friction index and which ground the
-// router is willing to cross.
-//
-// It is a presentational component: it takes the numbers and labels as props
-// and knows nothing about the grid, the router or GIS.
+import { elevationGradientCss, SLOPE_CLASS_LABELS, SLOPE_SWATCHES, type SlopeClass } from '../lib/overlay';
 
-import { elevationGradientCss } from '../lib/overlay';
+const count = new Intl.NumberFormat('en');
 
 export interface MapLegendProps {
-  /** Elevation range the tint is scaled to. */
-  elevation: { min: number; max: number; unit: string };
-  /** Slope class swatches, low class first. */
-  slopeClasses: { label: string; color: string }[];
-  /** The friction policy, stated in words. */
-  costPolicy: string;
-  /** Cell counts behind the traversability line. */
-  traversability: { traversable: number; blocked: number; total: number };
+  elevation: { min: number; max: number };
+  counts: number[];
+  statistics: { supported: number; total: number; unknown: number; blocked: number; finiteCost: number };
+  metresPerPixel: number;
+  areaKm: number;
 }
 
-export function MapLegend({
-  elevation,
-  slopeClasses,
-  costPolicy,
-  traversability,
-}: MapLegendProps) {
-  const blockedPct = ((traversability.blocked / traversability.total) * 100).toFixed(1);
+export function MapLegend({ elevation, counts, statistics, metresPerPixel, areaKm }: MapLegendProps) {
+  const formatElevation = (value: number) => value.toFixed(2).replace('-', '−');
 
   return (
     <div className="legend">
-        <section className="legend__group">
-          <h4 className="legend__label">Basemap</h4>
-          <p className="legend__text">
-            CTX orthomosaic, 6&nbsp;m/px, Jezero crater western fan.
-          </p>
-        </section>
-
-      <section className="legend__group">
-        <h4 className="legend__label">Elevation</h4>
-        <div className="legend__ramp" style={{ background: elevationGradientCss() }} aria-hidden="true" />
-        <p className="legend__text">
-          {elevation.min.toFixed(1)} to {elevation.max.toFixed(1)} {elevation.unit}, relative to the
-          Mars 2000 datum.
-        </p>
-      </section>
-
-      <section className="legend__group">
-        <h4 className="legend__label">Slope classes</h4>
-        <ul className="legend__items">
-          {slopeClasses.map((c) => (
-            <li key={c.label}>
-              <span className="legend__swatch" style={{ background: c.color }} aria-hidden="true" />
-              {c.label}
-            </li>
-          ))}
-        </ul>
-      </section>
-
-        <section className="legend__group">
-          <h4 className="legend__label">Movement cost</h4>
-          <p className="legend__text">{costPolicy}</p>
-        </section>
-
-        <section className="legend__group">
-          <h4 className="legend__label">Traversability</h4>
-          <p className="legend__text">
-            {traversability.traversable.toLocaleString()} of{' '}
-            {traversability.total.toLocaleString()} cells open;{' '}
-            {traversability.blocked.toLocaleString()} blocked ({blockedPct}%).
-          </p>
-        </section>
+      <p>CTX orthomosaic crop · <span className="number">{metresPerPixel.toFixed(3)}</span> m/px</p>
+      <p>Mars 2000 sphere · Equirectangular · <span className="number">{areaKm.toFixed(2)} × {areaKm.toFixed(2)}</span> km projected</p>
+      <h3>Elevation tint</h3>
+      <div className="legend__ramp" style={{ background: elevationGradientCss() }} aria-hidden="true" />
+      <div className="legend__range">
+        <span><span className="number">{formatElevation(elevation.min)}</span> m</span>
+        <span><span className="number">{formatElevation(elevation.max)}</span> m</span>
+      </div>
+      <h3>Slope classes</h3>
+      <ul>
+        {SLOPE_SWATCHES.map((color, idx) => (
+          <li key={idx}>
+            <span className="legend__swatch" style={{ backgroundColor: color }} aria-hidden="true" />
+            <span>{SLOPE_CLASS_LABELS[idx as SlopeClass]}{idx === 3 ? ' · Blocked' : idx === 0 ? ' · Clear tint' : ''}</span>
+            <span className="number">{count.format(counts[idx])} <span className="unit">cells</span></span>
+          </li>
+        ))}
+      </ul>
+      <p><span className="number">{count.format(statistics.supported)}</span> of <span className="number">{count.format(statistics.total)}</span> cells supported · <span className="number">{count.format(statistics.unknown)}</span> unknown</p>
+      <p><span className="number">{count.format(statistics.finiteCost)}</span> included · <span className="number">{count.format(statistics.blocked)}</span> blocked</p>
     </div>
   );
 }

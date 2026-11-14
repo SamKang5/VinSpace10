@@ -1,101 +1,76 @@
-// Terrain info card (R03).
-//
-// Shows what is under the cursor: the grid cell, its projected coordinates,
-// the elevation, the slope and the friction index the router uses.
-//
-// The panel is presentational and takes every value as a prop, so it can be
-// reused with mock data. It never says a cell is safe: the slope classes are
-// an illustrative research threshold.
+import type { FormEvent, MouseEvent } from 'react';
+import type { GridPoint } from '../lib/router';
 
-export interface TerrainInfoValues {
-  /** Grid cell as [row, col], or null when the cursor is off the grid. */
-  cell: [number, number] | null;
-  /** Projected easting and northing in metres. */
+export interface TerrainInfoPanelProps {
+  cell: GridPoint | null;
   projected: { x: number; y: number } | null;
-  /** Elevation in metres. */
   elevation: number | null;
-  /** Slope in degrees. */
   slope: number | null;
-  /** Dimensionless friction index. */
   cost: number | null;
-  /** The D07 slope class of the cell. */
   slopeClass: string | null;
-  /** True when the cell is excluded from routing. */
-  blocked: boolean;
-}
-
-export interface TerrainInfoPanelProps extends TerrainInfoValues {
-  /** Marks the cell as an endpoint of the route being drawn. */
-  endpoint?: 'A' | 'B' | null;
+  excluded: 'Blocked' | 'Unknown' | null;
+  endpoint: string | null;
+  size: { width: number; height: number };
+  activeMarker: 'A' | 'B' | null;
+  onInspect: (cell: GridPoint, place: boolean) => void;
+  inspectionStatus: string;
 }
 
 export function TerrainInfoPanel({
-  cell,
-  projected,
-  elevation,
-  slope,
-  cost,
-  slopeClass,
-  blocked,
-  endpoint,
+  cell, projected, elevation, slope, cost, slopeClass, excluded, endpoint, size, activeMarker,
+  onInspect, inspectionStatus,
 }: TerrainInfoPanelProps) {
-  if (!cell) {
-    return (
-      <div className="terrain-info">
-        <p className="terrain-info__empty">Hover the map to inspect a cell.</p>
-      </div>
-    );
-  }
+  const value = (numeric: number | null, digits: number, unit: string) => (
+    <>
+      <span className="number">{numeric == null ? '—' : numeric.toFixed(digits).replace('-', '−')}</span>
+      <span className="unit">{unit}</span>
+    </>
+  );
+
+  const readCell = (form: HTMLFormElement, place: boolean) => {
+    if (!form.reportValidity()) return;
+    const data = new FormData(form);
+    onInspect([Number(data.get('row')), Number(data.get('column'))], place);
+  };
+  const inspect = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    readCell(event.currentTarget, false);
+  };
+  const place = (event: MouseEvent<HTMLButtonElement>) => {
+    if (activeMarker && event.currentTarget.form) readCell(event.currentTarget.form, true);
+  };
 
   return (
-    <div className="terrain-info">
-      <div className="terrain-info__grid">
-        <div>
-          <dt>Cell</dt>
-          <dd>
-            [{cell[0]}, {cell[1]}]
-          </dd>
-        </div>
-        <div>
-          <dt>East / north</dt>
-          <dd>
-            {projected ? `${projected.x.toFixed(0)} / ${projected.y.toFixed(0)}` : '—'}
-            <span className="terrain-info__unit">m</span>
-          </dd>
-        </div>
-        <div>
-          <dt>Elevation</dt>
-          <dd>
-            {elevation === null ? '—' : elevation.toFixed(1)}
-            <span className="terrain-info__unit">m</span>
-          </dd>
-        </div>
-        <div>
-          <dt>Slope</dt>
-          <dd>
-            {slope === null ? '—' : slope.toFixed(1)}
-            <span className="terrain-info__unit">°</span>
-          </dd>
-        </div>
-        <div>
-          <dt>Friction</dt>
-          <dd>{cost === null ? '—' : cost.toFixed(2)}</dd>
-        </div>
-        <div>
-          <dt>Class</dt>
-          <dd className={blocked ? 'is-blocked' : undefined}>
-            {slopeClass ?? '—'}
-            {endpoint ? <span className="terrain-info__badge">End {endpoint}</span> : null}
-          </dd>
-        </div>
+    <div className="inspector">
+      <div className="inspector__position">
+        {cell ? <>
+          <span>Cell <span className="number">[{cell.join(', ')}]</span></span>
+          <span className={excluded ? 'warning' : undefined}>{excluded ?? 'Included in model'}{endpoint ? ' · ' + endpoint : ''}</span>
+        </> : <span>Hover or tap the map, or enter a cell below.</span>}
       </div>
-      {blocked ? (
-        <p className="terrain-info__note terrain-info__note--blocked">
-          Excluded from routing: the slope is 15° or more.
-        </p>
-      ) : (
-        <p className="terrain-info__note">Friction is a slope-derived index, not energy or speed.</p>
-      )}
+      <dl className="inspector__readings">
+        <div><dt>Elev</dt><dd>{value(elevation, 1, 'm')}</dd></div>
+        <div><dt>Slope</dt><dd>{value(slope, 1, '°')}</dd></div>
+        <div><dt>Friction</dt><dd>{value(cost, 2, 'index')}</dd></div>
+      </dl>
+      <dl className="inspector__details">
+        <div><dt>Slope class</dt><dd className="number">{slopeClass ?? '—'}</dd></div>
+        <div><dt>Easting</dt><dd>{value(projected?.x ?? null, 2, 'm')}</dd></div>
+        <div><dt>Northing</dt><dd>{value(projected?.y ?? null, 2, 'm')}</dd></div>
+      </dl>
+      <form className="cell-form" onSubmit={inspect} aria-label="Inspect by grid cell">
+        <div>
+          <label>Row<input type="number" name="row" required min="0" max={size.height - 1} step="1" inputMode="numeric" /></label>
+          <label>Column<input type="number" name="column" required min="0" max={size.width - 1} step="1" inputMode="numeric" /></label>
+        </div>
+        <div>
+          <button className="btn" type="submit">Inspect cell</button>
+          <button className="btn" type="button" aria-disabled={!activeMarker} onClick={place}>
+            {activeMarker ? 'Place ' + activeMarker + ' here' : 'Place endpoint here'}
+          </button>
+        </div>
+      </form>
+      <span className="sr-only" role="status">{inspectionStatus}</span>
     </div>
   );
 }

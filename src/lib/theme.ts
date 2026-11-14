@@ -7,7 +7,7 @@ import type { RouteMode } from './router';
 
 export const MODE_COLOR: Record<RouteMode, string> = {
   shortest: '#38bdf8',
-  'terrain-aware': '#fb923c',
+  'terrain-aware': '#f0a9da',
 };
 
 /**
@@ -24,15 +24,10 @@ export const MODE_LABEL: Record<RouteMode, string> = {
   'terrain-aware': 'Terrain-aware path',
 };
 
-export const MODE_HINT: Record<RouteMode, string> = {
-  shortest: 'Shortest distance',
-  'terrain-aware': 'Weighted by friction',
-};
-
 /** The endpoint markers, on the map and in the panel. */
 export const MARKER_COLOR: Record<'A' | 'B', string> = {
-  A: '#38bdf8',
-  B: '#fb923c',
+  A: '#f4efe6',
+  B: '#f4efe6',
 };
 
 export const MODE_ORDER: RouteMode[] = ['shortest', 'terrain-aware'];

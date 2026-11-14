@@ -1,309 +1,323 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { MapViewer, type MarkerSlot } from './components/MapViewer';
-import { ControlPanel } from './components/ControlPanel';
-import { RouteComparison } from './components/RouteComparison';
-import { MapLegend } from './components/MapLegend';
-import { TerrainInfoPanel } from './components/TerrainInfoPanel';
-import { HowToModal } from './components/HowToModal';
 import { Block } from './components/Block';
+import { ControlPanel } from './components/ControlPanel';
+import { HowToModal } from './components/HowToModal';
+import { Icon } from './components/Icon';
+import { MapLegend } from './components/MapLegend';
+import { MapViewer, type MarkerSlot } from './components/MapViewer';
+import { RouteComparison } from './components/RouteComparison';
+import { TerrainInfoPanel } from './components/TerrainInfoPanel';
 import { loadAppData, type AppData } from './lib/data';
-import {
-  buildElevationOverlay,
-  buildSlopeOverlay,
-  slopeClassOf,
-  SLOPE_CLASS_LABELS,
-  type SlopeClass,
-} from './lib/overlay';
 import { cellToProjected } from './lib/geo';
+import { buildElevationOverlay, buildSlopeOverlay, SLOPE_CLASS_LABELS, type SlopeClass } from './lib/overlay';
 import { NODATA, route, type GridPoint, type RouteMode, type RouteResult } from './lib/router';
-import { MODE_COLOR, MODE_DASHED, MODE_LABEL } from './lib/theme';
+import { MODE_COLOR, MODE_DASHED, MODE_ORDER } from './lib/theme';
 
-/** The D08 example pair: a long traverse across the western fan. */
 const EXAMPLE_START: GridPoint = [230, 30];
 const EXAMPLE_END: GridPoint = [35, 235];
 
-/** The legend swatches, in class order. */
-const LEGEND_CLASS_COLORS = [
-  'rgba(230, 195, 90, 0.55)',
-  'rgba(242, 132, 59, 0.7)',
-  'rgba(242, 68, 45, 0.85)',
-];
+type Results = Partial<Record<RouteMode, RouteResult>>;
+
+function compareRoutes(data: AppData, start: GridPoint, end: GridPoint): Results {
+  return {
+    shortest: route(data.routing, start, end, 'shortest'),
+    'terrain-aware': route(data.routing, start, end, 'terrain-aware'),
+  };
+}
+
+function readCell(data: AppData, [row, col]: GridPoint) {
+  const index = row * data.routing.width + col;
+  const cost = data.routing.cost[index];
+  const hazard = data.hazard[index];
+  const excluded = data.routing.mask[index] !== 1 ? 'Unknown' : cost === NODATA ? 'Blocked' : null;
+  return {
+    projected: cellToProjected(row, col),
+    elevation: Number.isFinite(data.elevation[index]) ? data.elevation[index] : null,
+    slope: excluded ? null : data.routing.slope[index],
+    cost: excluded ? null : cost,
+    slopeClass: hazard <= 3 ? SLOPE_CLASS_LABELS[hazard as SlopeClass] : null,
+    excluded,
+  } as const;
+}
+
+function matches(a: GridPoint | null, b: GridPoint | null) {
+  return a === b || (a !== null && b !== null && a[0] === b[0] && a[1] === b[1]);
+}
 
 export default function App() {
-  const [data, setData] = useState<AppData | null>(null);
+  const [loaded, setLoaded] = useState<{ data: AppData; image: HTMLImageElement } | null>(null);
+  const [loadStatus, setLoadStatus] = useState('Loading navigation grid and terrain rasters…');
   const [error, setError] = useState<string | null>(null);
+  const [loadAttempt, setLoadAttempt] = useState(0);
   const [start, setStart] = useState<GridPoint | null>(null);
   const [end, setEnd] = useState<GridPoint | null>(null);
-  const [activeMarker, setActiveMarker] = useState<MarkerSlot>('A');
+  const [activeMarker, setActiveMarker] = useState<MarkerSlot | null>(null);
   const [mode, setMode] = useState<RouteMode>('shortest');
-  const [results, setResults] = useState<Partial<Record<RouteMode, RouteResult>>>({});
+  const [results, setResults] = useState<Results>({});
+  const [resultRevision, setResultRevision] = useState(0);
+  const [example, setExample] = useState(false);
+  const [viewRevision, setViewRevision] = useState(0);
+  const [calculating, setCalculating] = useState(false);
   const [showSlopeClasses, setShowSlopeClasses] = useState(false);
   const [showElevation, setShowElevation] = useState(false);
   const [hovered, setHovered] = useState<GridPoint | null>(null);
+  const [inspected, setInspected] = useState<GridPoint | null>(null);
   const [howToOpen, setHowToOpen] = useState(false);
 
-  // ---- data loading --------------------------------------------------------
-  useEffect(() => {
-    const controller = new AbortController();
-    loadAppData(controller.signal)
-      .then(setData)
-      .catch((cause: unknown) => {
-        if (controller.signal.aborted) return;
-        setError(cause instanceof Error ? cause.message : String(cause));
-      });
-    return () => controller.abort();
-  }, []);
+  const data = loaded?.data ?? null;
 
-  const slopeOverlay = useMemo(
-    () => (data ? buildSlopeOverlay(data.routing.width, data.routing.height, data.hazard) : null),
-    [data],
-  );
-
-  const elevationOverlay = useMemo(
-    () =>
-      data
-        ? buildElevationOverlay(
-            data.routing.width,
-            data.routing.height,
-            data.elevation,
-            data.overlay.elevation.min,
-            data.overlay.elevation.max,
-          )
-        : null,
-    [data],
-  );
-
-  /** What is under the cursor, read from the rasters the app already holds. */
-  const hoveredInfo = useMemo(() => {
-    if (!data || !hovered) return null;
-    const index = hovered[0] * data.routing.width + hovered[1];
-    const cost = data.routing.cost[index];
-    const blocked = cost === NODATA;
-    const slope = blocked ? null : data.routing.slope[index];
-    return {
-      cell: hovered as [number, number],
-      projected: cellToProjected(hovered[0], hovered[1]),
-      elevation: data.elevation[index],
-      slope,
-      cost: blocked ? null : cost,
-      slopeClass: SLOPE_CLASS_LABELS[slopeClassOf(slope ?? Number.NaN)],
-      blocked,
-      endpoint:
-        (start && start[0] === hovered[0] && start[1] === hovered[1]
-          ? 'A'
-          : end && end[0] === hovered[0] && end[1] === hovered[1]
-            ? 'B'
-            : null) as 'A' | 'B' | null,
-    };
-  }, [data, hovered, start, end]);
-
-  // ---- routing -------------------------------------------------------------
-  const calculate = useCallback(() => {
-    if (!data || !start || !end) return;
-    setResults({
-      shortest: route(data.routing, start, end, 'shortest'),
-      'terrain-aware': route(data.routing, start, end, 'terrain-aware'),
-    });
-  }, [data, start, end]);
-
-  const handleMapClick = useCallback(
-    (point: GridPoint) => {
-      if (activeMarker === 'A') {
-        setStart(point);
-        setActiveMarker('B');
-      } else {
-        setEnd(point);
-        setActiveMarker('A');
-      }
-      setResults({});
-    },
-    [activeMarker],
-  );
-
-  const useExample = useCallback(() => {
+  const useExample = useCallback((exampleData: AppData) => {
     setStart(EXAMPLE_START);
     setEnd(EXAMPLE_END);
-    setActiveMarker('A');
-    setResults({});
+    setActiveMarker(null);
+    setMode('shortest');
+    setCalculating(false);
+    setResults(compareRoutes(exampleData, EXAMPLE_START, EXAMPLE_END));
+    setExample(true);
+    setResultRevision((value) => value + 1);
+    setViewRevision((value) => value + 1);
   }, []);
 
-  const clear = useCallback(() => {
-    setStart(null);
-    setEnd(null);
-    setResults({});
-  }, []);
+  useEffect(() => {
+    const controller = new AbortController();
+    const load = async () => {
+      const nextData = await loadAppData(controller.signal);
+      if (controller.signal.aborted) return;
+      setLoadStatus('Decoding CTX orthomosaic…');
 
-  // Both modes are drawn; the selected one draws on top.
-  const paths = useMemo(() => {
-    return (['shortest', 'terrain-aware'] as RouteMode[])
-      .map((m) => {
-        const result = results[m];
-        if (!result || result.status !== 'ok') return null;
-        return {
-          id: m,
-          label: MODE_LABEL[m],
-          points: result.path,
-          color: MODE_COLOR[m],
-          active: m === mode,
-          dashed: MODE_DASHED[m],
-        };
-      })
-      .filter((p): p is NonNullable<typeof p> => p !== null);
-  }, [results, mode]);
+      const image = new Image();
+      image.src = import.meta.env.BASE_URL + 'terrain/' + nextData.meta.image;
+      try {
+        await image.decode();
+      } catch {
+        throw new Error('The CTX orthomosaic could not be loaded or decoded.');
+      }
+      if (controller.signal.aborted) return;
+      useExample(nextData);
+      setLoaded({ data: nextData, image });
+    };
+    load().catch((cause: unknown) => {
+      if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : String(cause));
+    });
+    return () => controller.abort();
+  }, [loadAttempt, useExample]);
 
-  // The markers must keep their identity, or every render redraws the canvas.
-  const markers = useMemo(
-    () => ({ A: start ?? undefined, B: end ?? undefined }),
-    [start, end],
+  const slopeOverlay = useMemo(
+    () => data && buildSlopeOverlay(data.routing.width, data.routing.height, data.hazard),
+    [data],
+  );
+  const elevationOverlay = useMemo(
+    () => data && buildElevationOverlay(
+      data.routing.width, data.routing.height, data.elevation, data.overlay.elevation.min, data.overlay.elevation.max,
+    ),
+    [data],
   );
 
-  // ---- render --------------------------------------------------------------
-  if (error) {
-    return (
-      <div className="app app--error">
-        <p className="app__error">Could not load the terrain data: {error}</p>
-      </div>
-    );
-  }
+  const excluded = useMemo(() => ({
+    A: data && start ? readCell(data, start).excluded : null,
+    B: data && end ? readCell(data, end).excluded : null,
+  }), [data, start, end]);
+  const affectedSlots = (['A', 'B'] as const).filter((slot) => excluded[slot]);
+  const canCalculate = Boolean(start && end && !affectedSlots.length);
+  const cell = hovered ?? inspected;
+  const cellInfo = data && cell ? readCell(data, cell) : null;
+  const endpoint = cell && [matches(cell, start) && 'A', matches(cell, end) && 'B'].filter(Boolean).join(' + ');
+  const onHover = useCallback((point: GridPoint | null) => {
+    setHovered((previous) => matches(previous, point) ? previous : point);
+  }, []);
 
-  if (!data) {
-    return (
-      <div className="app app--loading">
-        <p>Loading Jezero terrain…</p>
-      </div>
-    );
-  }
+  const calculate = useCallback(() => {
+    if (!data || !canCalculate || calculating) return;
+    setCalculating(true);
+  }, [data, canCalculate, calculating]);
 
-  const { metadata } = data;
+  useEffect(() => {
+    if (!calculating || !data || !start || !end || !canCalculate) return;
+    let timeout = 0;
+    const frame = requestAnimationFrame(() => {
+      timeout = window.setTimeout(() => {
+        const nextResults = compareRoutes(data, start, end);
+        if (nextResults[mode]?.status !== 'ok') {
+          const firstRoute = MODE_ORDER.find((key) => nextResults[key]?.status === 'ok');
+          if (firstRoute) setMode(firstRoute);
+        }
+        setResults(nextResults);
+        setResultRevision((value) => value + 1);
+        setCalculating(false);
+      }, 0);
+    });
+    return () => {
+      cancelAnimationFrame(frame);
+      window.clearTimeout(timeout);
+    };
+  }, [calculating, data, start, end, canCalculate, mode]);
+
+  const handleMapClick = useCallback((point: GridPoint) => {
+    if (!data) return;
+    setInspected(point);
+    setHovered(null);
+    if (!activeMarker) return;
+    const excluded = readCell(data, point).excluded;
+    if (activeMarker === 'A') setStart(point);
+    else setEnd(point);
+    setResults({});
+    setExample(false);
+    setCalculating(false);
+    if (!excluded) {
+      setActiveMarker(activeMarker === 'A' && !end ? 'B' : activeMarker === 'B' && !start ? 'A' : null);
+    }
+  }, [data, activeMarker, end, start]);
+
+  const inspect = useCallback((point: GridPoint, place: boolean) => {
+    if (place) {
+      handleMapClick(point);
+      return;
+    }
+    setHovered(null);
+    setInspected(point);
+  }, [handleMapClick]);
+
+  const clear = () => {
+    if (!start && !end) return;
+    setStart(null);
+    setEnd(null);
+    setActiveMarker('A');
+    setResults({});
+    setExample(false);
+    setCalculating(false);
+  };
+
+  const paths = useMemo(() => MODE_ORDER.flatMap((key) => {
+    const result = results[key];
+    return result?.status === 'ok' ? [{
+      id: key, points: result.path, color: MODE_COLOR[key], active: key === mode, dashed: MODE_DASHED[key],
+    }] : [];
+  }), [results, mode]);
+  const markers = useMemo(() => ({ A: start ?? undefined, B: end ?? undefined }), [start, end]);
+
+  const resultCount = paths.length;
+  const routeFailure = MODE_ORDER.map((key) => results[key]?.status).find((status) => status && status !== 'ok');
+  const controlStatus = affectedSlots.length
+    ? 'Choose another cell for ' + affectedSlots.join(' and ') + '.'
+    : activeMarker
+      ? 'Select a map cell for ' + (activeMarker === 'A' ? 'Start A.' : 'End B.')
+      : 'Select Start or End to move an endpoint.';
+  const comparisonStatus = calculating ? 'Calculating both routes…'
+    : resultCount === 2 ? (example ? 'D08 reference traverse · Two routes found' : 'Two routes found')
+    : resultCount === 1 ? 'One route found'
+    : routeFailure === 'out_of_bounds' ? 'An endpoint is outside the grid.'
+    : affectedSlots.length || routeFailure === 'blocked_endpoint' ? 'An endpoint is excluded from routing.'
+    : routeFailure === 'no_path' ? 'No route connects these endpoints.'
+    : start && end ? 'Calculate routes to compare this pair.'
+    : 'Place Start A and End B to compare routes.';
+
+  const selectedInfo = data && inspected ? readCell(data, inspected) : null;
+  const inspectionStatus = selectedInfo && inspected
+    ? 'Cell ' + inspected[0] + ', ' + inspected[1] + '. ' + (selectedInfo.excluded ?? 'Included in model') +
+      '. Elevation ' + (selectedInfo.elevation === null ? 'unavailable' : selectedInfo.elevation.toFixed(1) + ' metres') +
+      '. Slope ' + (selectedInfo.slope === null ? 'unavailable' : selectedInfo.slope.toFixed(1) + ' degrees') +
+      '. Friction index ' + (selectedInfo.cost?.toFixed(2) ?? 'unavailable') + '.'
+    : '';
 
   return (
     <div className="app">
-      <a className="skip-link" href="#main">
-        Skip to content
-      </a>
+      <a className="skip-link" href="#main">Skip to content</a>
       <header className="app__head">
         <div className="app__brand">
-          <h1 className="app__title">MARS NAVIGATOR</h1>
-          <span className="app__dot" aria-hidden="true">
-            ·
-          </span>
-          <p className="app__sub">Jezero crater western fan</p>
+          <h1>Mars Navigator</h1>
+          <p>Jezero Crater · Western fan</p>
         </div>
-        <div className="app__head-spacer" />
-        <dl className="app__stats">
-          <div>
-            <dt>Grid</dt>
-            <dd>
-              {metadata.width}×{metadata.height}
-            </dd>
-          </div>
-          <div>
-            <dt>Cell</dt>
-            <dd>{metadata.resolutionProjectedMeters[0]} m</dd>
-          </div>
-          <div>
-            <dt>Blocked</dt>
-            <dd>{metadata.statistics.blocked.toLocaleString()}</dd>
-          </div>
-          <div>
-            <dt>CRS</dt>
-            <dd>Mars 2000</dd>
-          </div>
+        <dl className="app__stats" aria-label="Terrain grid">
+          {data && <>
+            <div><dt>Grid</dt><dd>{data.metadata.width} × {data.metadata.height}</dd></div>
+            <div><dt>Cell</dt><dd>{data.metadata.resolutionProjectedMeters[0]} <span className="unit">m projected</span></dd></div>
+            <div><dt>CRS</dt><dd>Mars 2000</dd></div>
+          </>}
         </dl>
-        <button type="button" className="btn btn--ghost btn--sm" onClick={() => setHowToOpen(true)}>
-          How to use
+        <button type="button" className="btn help-btn" onClick={(event) => {
+          event.currentTarget.focus();
+          setHowToOpen(true);
+        }}>
+          <Icon name="help" />How to use
         </button>
       </header>
 
       <main className="app__body" id="main" tabIndex={-1}>
-        {/* A div, not a section: the kit styles `main > section` as a full-height
-            page section, which would size the map to the viewport height. */}
         <div className="app__map">
-          <MapViewer
-            meta={data.meta}
-            imageUrl={`${import.meta.env.BASE_URL}terrain/${data.meta.image}`}
-            markers={markers}
-            paths={paths}
-            activeMarker={activeMarker}
-            onMapClick={handleMapClick}
-            onHover={setHovered}
-            slopeOverlay={slopeOverlay}
-            elevationOverlay={elevationOverlay}
-            showSlopeClasses={showSlopeClasses}
-            showElevation={showElevation}
-          />
+          {data && loaded ? (
+            <MapViewer meta={data.meta} image={loaded.image} markers={markers} paths={paths}
+              activeMarker={activeMarker} onCancelPlacement={() => setActiveMarker(null)}
+              onMapClick={handleMapClick} onHover={onHover}
+              onInspect={(point) => inspect(point, false)}
+              slopeOverlay={slopeOverlay} elevationOverlay={elevationOverlay}
+              showSlopeClasses={showSlopeClasses} showElevation={showElevation}
+              viewRevision={viewRevision} />
+          ) : (
+            <div className="map-state">
+              <div className="map-state__head">CTX orthomosaic</div>
+              <div className="map-state__body">
+                {error ? (
+                  <div>
+                    <h2 role="alert">Terrain files unavailable</h2>
+                    <p>{error}</p>
+                    <button type="button" className="btn" onClick={() => {
+                      setError(null);
+                      setLoadStatus('Loading navigation grid and terrain rasters…');
+                      setLoadAttempt((value) => value + 1);
+                      document.getElementById('main')?.focus();
+                    }}>Retry terrain load</button>
+                  </div>
+                ) : (
+                  <div className="map-state__loading">
+                    <div className="map-state__skeleton" aria-hidden="true"><i /><i /><i /><i /></div>
+                    <p role="status">{loadStatus}</p>
+                  </div>
+                )}
+              </div>
+              <div className="map-state__foot">Jezero Crater · Western fan</div>
+            </div>
+          )}
         </div>
 
         <aside className="app__rail" aria-label="Route tools">
-          <Block title="Route endpoints" defaultOpen>
-            <ControlPanel
-              start={start}
-              end={end}
-              activeMarker={activeMarker}
-              onActiveMarkerChange={setActiveMarker}
-              mode={mode}
-              onModeChange={setMode}
-              onCalculate={calculate}
-              onClear={clear}
-              onUseExample={useExample}
-              showSlopeClasses={showSlopeClasses}
-              onShowSlopeClassesChange={setShowSlopeClasses}
-              showElevation={showElevation}
-              onShowElevationChange={setShowElevation}
-              canCalculate={Boolean(start && end)}
-            />
+          <Block title="Route comparison" defaultOpen>
+            {data ? <RouteComparison results={results} activeMode={mode} onSelectMode={setMode}
+              status={comparisonStatus} resultRevision={resultRevision} calculating={calculating} />
+              : <p className="comparison__status">{error ? 'Comparison unavailable.' : 'Waiting for terrain files.'}</p>}
           </Block>
-
-          <Block title="Comparison" defaultOpen>
-            <RouteComparison results={results} activeMode={mode} onSelectMode={setMode} />
-          </Block>
-
-          <Block title="Terrain info" defaultOpen>
-            <TerrainInfoPanel
-              cell={hoveredInfo?.cell ?? null}
-              projected={hoveredInfo?.projected ?? null}
-              elevation={hoveredInfo?.elevation ?? null}
-              slope={hoveredInfo?.slope ?? null}
-              cost={hoveredInfo?.cost ?? null}
-              slopeClass={hoveredInfo?.slopeClass ?? null}
-              blocked={hoveredInfo?.blocked ?? false}
-              endpoint={hoveredInfo?.endpoint ?? null}
-            />
-          </Block>
-
-          <Block title="Legend">
-            <MapLegend
-              elevation={{
-                min: data.overlay.elevation.min,
-                max: data.overlay.elevation.max,
-                unit: data.overlay.elevation.unit,
-              }}
-              slopeClasses={LEGEND_CLASS_COLORS.map((color, i) => ({
-                label: SLOPE_CLASS_LABELS[(i + 1) as SlopeClass],
-                color,
-              }))}
-              costPolicy="Friction = 1 + (slope ÷ 10)². The terrain-aware route minimises distance weighted by this index."
-              traversability={{
-                traversable: metadata.statistics.finiteCost,
-                blocked: metadata.statistics.blocked,
-                total: metadata.statistics.total,
-              }}
-            />
-          </Block>
-
-          <section className="block">
-            <div className="block__body">
-              <p className="panel__note">
-                Research prototype. Friction is a dimensionless slope-derived index
-                (1 + (slope/10)²), not energy, speed or safety. Cells at 15° or more are
-                excluded from routing in both modes.
-              </p>
-            </div>
-          </section>
+          {data && <>
+            <Block title="Endpoints" defaultOpen>
+              <ControlPanel start={start} end={end} activeMarker={activeMarker}
+                onActiveMarkerChange={(slot) => setActiveMarker((current) => current === slot ? null : slot)}
+                onCalculate={calculate} onClear={clear} onUseExample={() => useExample(data)}
+                showSlopeClasses={showSlopeClasses} onShowSlopeClassesChange={setShowSlopeClasses}
+                showElevation={showElevation} onShowElevationChange={setShowElevation}
+                canCalculate={canCalculate} calculating={calculating} excluded={excluded} status={controlStatus} />
+            </Block>
+            <Block title="Cell inspector" defaultOpen>
+              <TerrainInfoPanel cell={cell} projected={cellInfo?.projected ?? null}
+                elevation={cellInfo?.elevation ?? null} slope={cellInfo?.slope ?? null} cost={cellInfo?.cost ?? null}
+                slopeClass={cellInfo?.slopeClass ?? null} excluded={cellInfo?.excluded ?? null}
+                endpoint={endpoint || null} size={data.metadata} activeMarker={activeMarker}
+                onInspect={inspect} inspectionStatus={inspectionStatus} />
+            </Block>
+            <Block title="Terrain key">
+              <MapLegend elevation={data.overlay.elevation} counts={data.overlay.hazard.counts}
+                statistics={data.metadata.statistics} metresPerPixel={data.meta.metersPerPx}
+                areaKm={data.metadata.width * data.metadata.resolutionProjectedMeters[0] / 1000} />
+            </Block>
+          </>}
+          <footer className="provenance">
+            <h2>Model and source</h2>
+            <p>Research prototype. Friction is an uncalibrated, dimensionless slope index
+              <span className="number"> 1 + (slope in degrees ÷ 10)²</span>. It does not measure energy, speed or safety.
+              Both modes exclude cells at <span className="number">15</span>° or steeper. Physical image-to-DEM
+              registration and the DEM vertical datum remain unresolved.</p>
+            <a href="https://doi.org/10.5066/P9GV1ND3">CTX orthomosaic · Fergason et al. 2020 · USGS Astrogeology / NASA MRO</a>
+          </footer>
         </aside>
       </main>
-
-      <HowToModal open={howToOpen} onClose={() => setHowToOpen(false)} />
+      {howToOpen && <HowToModal open={howToOpen} onClose={() => setHowToOpen(false)} />}
     </div>
   );
 }

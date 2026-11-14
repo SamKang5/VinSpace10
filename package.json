@@ -6,7 +6,7 @@
   "description": "Interactive A* route planning over NASA/USGS Jezero Crater terrain data",
   "scripts": {
     "dev": "npm run data && vite",
-    "build": "npm run data && tsc -b && vite build",
+    "build": "npm run data && tsc -b && vite build && node scripts/build-offline-worker.mjs",
     "preview": "vite preview",
     "typecheck": "tsc -b --noEmit",
     "check": "npm run data && node --experimental-strip-types scripts/check-routing.mts && node --experimental-strip-types --test tests/*.test.ts",
