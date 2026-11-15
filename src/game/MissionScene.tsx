@@ -14,6 +14,7 @@ export type SceneProps = {
   scanning: Survey | undefined; showRoutes: boolean; reducedMotion: boolean;
   onUpdate: () => void; onPause: () => void; onBlocked: () => void;
 };
+const SIMULATION_STEP = 0.1;
 
 function Terrain({ data, image }: Pick<SceneProps, 'data' | 'image'>) {
   const { geometry, texture, detail } = useMemo(() => {
@@ -169,6 +170,9 @@ function World(props: SceneProps) {
   const originalDetailRoutes = useRef(props.routes);
   const suit = useRef<THREE.Group>(null), leftLeg = useRef<THREE.Group>(null), rightLeg = useRef<THREE.Group>(null);
   const leftArm = useRef<THREE.Group>(null), rightArm = useRef<THREE.Group>(null);
+  const shadow = useRef<THREE.Mesh>(null);
+  const previousPosition = useRef(mission.position);
+  const renderPosition = useRef({ ...mission.position });
   const input = useRef({ keys: new Set<string>(), yaw: Math.atan2(cellPosition(props.end).x - mission.position.x,
     -(cellPosition(props.end).z - mission.position.z)), pitch: 0.33, zoom: 11, drag: false });
   const accumulator = useRef(0), hudTimer = useRef(0), gait = useRef(0), initialized = useRef(false);
@@ -222,7 +226,6 @@ function World(props: SceneProps) {
 
   useFrame((_, delta) => {
     const controls = input.current;
-    const before = { ...mission.position };
     let attemptingMovement = false;
     if (active && mission.status === 'active') {
       const forward = Number(controls.keys.has('KeyW') || controls.keys.has('ArrowUp')) - Number(controls.keys.has('KeyS') || controls.keys.has('ArrowDown'));
@@ -230,22 +233,32 @@ function World(props: SceneProps) {
       attemptingMovement = forward !== 0 || right !== 0;
       const direction: Position = { x: Math.sin(controls.yaw) * forward + Math.cos(controls.yaw) * right,
         z: -Math.cos(controls.yaw) * forward + Math.sin(controls.yaw) * right };
-      accumulator.current += Math.min(delta, 0.1) * timeScale;
-      while (accumulator.current >= 0.1 && mission.status === 'active') {
-        advanceMission(mission, data.routing, props.end, budget, 0.1, direction, scanning);
-        accumulator.current -= 0.1;
+      accumulator.current += Math.min(delta, SIMULATION_STEP) * timeScale;
+      while (accumulator.current >= SIMULATION_STEP && mission.status === 'active') {
+        previousPosition.current = mission.position;
+        advanceMission(mission, data.routing, props.end, budget, SIMULATION_STEP, direction, scanning);
+        accumulator.current -= SIMULATION_STEP;
       }
+    } else {
+      previousPosition.current = mission.position;
     }
-    const y = terrainHeight(data.elevation, data.routing.width, data.routing.height, mission.position) - data.overlay.elevation.min;
-    const moving = Math.hypot(mission.position.x - before.x, mission.position.z - before.z) > 0.001;
+    // Draw between completed ticks so the suit and camera move on frames without a simulation step.
+    const blend = active && mission.status === 'active' ? accumulator.current / SIMULATION_STEP : 1;
+    const position = renderPosition.current;
+    const x = THREE.MathUtils.lerp(previousPosition.current.x, mission.position.x, blend);
+    const z = THREE.MathUtils.lerp(previousPosition.current.z, mission.position.z, blend);
+    const dx = x - position.x, dz = z - position.z;
+    position.x = x; position.z = z;
+    const y = terrainHeight(data.elevation, data.routing.width, data.routing.height, position) - data.overlay.elevation.min;
+    const moving = active && Math.hypot(dx, dz) > 0.001;
     if (active && !scanning && attemptingMovement && !moving) {
       blockedTimer.current += delta;
       if (blockedTimer.current > 0.8) { props.onBlocked(); blockedTimer.current = 0; }
     } else blockedTimer.current = 0;
     if (suit.current) {
-      suit.current.position.set(mission.position.x, y, mission.position.z);
+      suit.current.position.set(x, y, z);
       if (moving) {
-        const target = Math.atan2(-(mission.position.x - before.x), -(mission.position.z - before.z));
+        const target = Math.atan2(-dx, -dz);
         const diff = Math.atan2(Math.sin(target - suit.current.rotation.y), Math.cos(target - suit.current.rotation.y));
         suit.current.rotation.y += diff * Math.min(1, delta * 12);
       }
@@ -256,14 +269,15 @@ function World(props: SceneProps) {
         leftArm.current.rotation.x = -swing * 0.7; rightArm.current.rotation.x = swing * 0.7;
       }
     }
+    shadow.current?.position.set(x, y + 0.04, z);
     const zoom = reducedMotion ? Math.max(controls.zoom, 18) : controls.zoom;
-    cameraTarget.set(mission.position.x - Math.sin(controls.yaw) * zoom * Math.cos(controls.pitch),
-      y + 3 + zoom * Math.sin(controls.pitch), mission.position.z + Math.cos(controls.yaw) * zoom * Math.cos(controls.pitch));
+    cameraTarget.set(x - Math.sin(controls.yaw) * zoom * Math.cos(controls.pitch),
+      y + 3 + zoom * Math.sin(controls.pitch), z + Math.cos(controls.yaw) * zoom * Math.cos(controls.pitch));
     const ground = terrainHeight(data.elevation, data.routing.width, data.routing.height, { x: cameraTarget.x, z: cameraTarget.z }) - data.overlay.elevation.min;
     cameraTarget.y = Math.max(cameraTarget.y, ground + 2.5);
     if (!initialized.current || reducedMotion) { camera.position.copy(cameraTarget); initialized.current = true; }
     else camera.position.lerp(cameraTarget, 1 - Math.exp(-delta * 9));
-    lookTarget.set(mission.position.x + Math.sin(controls.yaw) * 6, y + 1.6, mission.position.z - Math.cos(controls.yaw) * 6);
+    lookTarget.set(x + Math.sin(controls.yaw) * 6, y + 1.6, z - Math.cos(controls.yaw) * 6);
     camera.lookAt(lookTarget);
     hudTimer.current += delta;
     if (active && (hudTimer.current > 0.12 || mission.status !== 'active')) { hudTimer.current = 0; onUpdate(); }
@@ -281,14 +295,10 @@ function World(props: SceneProps) {
     <Beacon data={data} cell={props.end} destination />
     {props.surveys.map(s => <Beacon key={s.id} data={data} cell={s.cell} collected={mission.scans.includes(s.id)} />)}
     <Astronaut suit={suit} leftLeg={leftLeg} rightLeg={rightLeg} leftArm={leftArm} rightArm={rightArm} />
-    <mesh rotation-x={-Math.PI / 2} position={[mission.position.x, yForShadow(data, mission.position), mission.position.z]}>
+    <mesh ref={shadow} rotation-x={-Math.PI / 2}>
       <circleGeometry args={[0.65, 20]} /><meshBasicMaterial color="#302016" transparent opacity={0.35} depthWrite={false} />
     </mesh>
   </>;
-}
-
-function yForShadow(data: AppData, position: Position) {
-  return terrainHeight(data.elevation, data.routing.width, data.routing.height, position) - data.overlay.elevation.min + 0.04;
 }
 
 export default function MissionScene(props: SceneProps) {
