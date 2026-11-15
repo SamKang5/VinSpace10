@@ -229,8 +229,7 @@ export default function MissionGame({ data, image, start, end, routes, selected,
       <button className="mission-button" onClick={pause}>Pause <kbd>Esc</kbd></button>
     </header>
 
-    <aside className="mission__instruments" aria-label="Suit resources">
-      <div className="suit-meters"><SuitMeter resource="oxygen" value={hud.oxygen} /><SuitMeter resource="energy" value={hud.energy} /></div>
+    <aside className="mission__instruments" aria-label="Mission telemetry">
       <div className="mission__telemetry"><span>Mission time <strong>{clock(hud.elapsed)}</strong></span><span>{meters(hud.distance)} walked</span></div>
     </aside>
 
@@ -247,6 +246,10 @@ export default function MissionGame({ data, image, start, end, routes, selected,
         aria-label={expanded ? 'Minimize map' : 'Expand map'} aria-expanded={expanded} aria-keyshortcuts="M">{expanded && 'Minimize '}<kbd>M</kbd></button></header>
       {expanded && <div className="mission-map__north">N ↑ <span>Red: excluded terrain</span></div>}
       <MissionMap data={data} image={image} hud={hud} routes={guidance} selected={guide} surveys={surveys} start={start} end={end} showRoutes={showRoutes} />
+      <div className="suit-meters" role="group" aria-label="Suit resources">
+        <SuitMeter resource="oxygen" value={hud.oxygen} />
+        <SuitMeter resource="energy" value={hud.energy} />
+      </div>
       {expanded && <><div className="mission-map__routes">{(['shortest', 'terrain-aware'] as RouteMode[]).map(mode => <button key={mode}
         style={{ '--guide-color': MODE_COLOR[mode] } as React.CSSProperties} aria-pressed={guide === mode}
         onClick={() => setGuide(mode)}>{mode === 'shortest' ? 'Shortest' : 'Terrain-aware'}</button>)}</div>

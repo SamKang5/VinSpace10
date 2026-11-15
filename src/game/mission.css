@@ -22,7 +22,7 @@
 .mission-text-button:disabled { opacity: .5; }
 .mission kbd { font: 10px var(--mono); padding: 3px 5px; border: 1px solid currentColor; border-radius: 3px; white-space: nowrap; }
 .mission__instruments { position: absolute; left: 28px; top: 110px; width: min(330px, calc(100vw - 32px)); padding: 9px 12px; border-radius: 5px; background: rgb(29 24 21 / .9); border: 1px solid rgb(238 218 188 / .22); pointer-events: none; }
-.suit-meters { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.suit-meters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 4px; padding: 9px 12px; border-radius: 5px; background: rgb(29 24 21 / .9); border: 1px solid rgb(238 218 188 / .22); }
 .suit-meter { display: grid; grid-template-columns: 16px minmax(0, 1fr) 4ch; gap: 5px; align-items: center; color: var(--reserve-color); font: 10px var(--mono); }
 .suit-meter--oxygen { --reserve-color: #b8ca9c; }
 .suit-meter--energy { --reserve-color: #efbf7a; }
@@ -33,7 +33,7 @@
 .suit-meter meter::-webkit-meter-bar { height: 7px; background: #55463a; border: 0; border-radius: 0; }
 .suit-meter meter::-webkit-meter-optimum-value { background: var(--reserve-color); }
 .suit-meter meter::-moz-meter-bar { background: var(--reserve-color); }
-.mission__telemetry { display: flex; justify-content: space-between; gap: 8px; border-top: 1px solid rgb(238 218 188 / .18); margin-top: 7px; padding-top: 6px; color: #d0c2b1; font: 10px var(--mono); }
+.mission__telemetry { display: flex; justify-content: space-between; gap: 8px; color: #d0c2b1; font: 10px var(--mono); }
 .mission__telemetry strong { color: #f5eee2; font-weight: 500; }
 .mission__context { position: absolute; left: 28px; bottom: 64px; width: min(350px, 28vw); display: grid; gap: 15px; pointer-events: none; }
 .mission__comms { padding: 14px 16px; background: rgb(29 24 21 / .9); border-left: 2px solid #dcb37b; border-radius: 0 6px 6px 0; }
@@ -57,7 +57,7 @@
 .mission-map__actions label { display: flex; align-items: center; gap: 5px; font-size: 10px; }
 .mission-map__actions input { accent-color: #efd5af; }
 .mission-map > small { display: block; margin-top: 5px; color: #c8bbac; font-size: 9px; }
-.mission-map--expanded { width: min(520px, 70vw, calc(100dvh - 120px)); z-index: 2; padding: 12px; background: rgb(29 24 21 / .95); border: 1px solid rgb(238 218 188 / .3); border-radius: 6px; }
+.mission-map--expanded { width: min(520px, 70vw, calc(100dvh - 120px)); max-height: calc(100dvh - 80px); overflow-y: auto; z-index: 2; padding: 12px; background: rgb(29 24 21 / .95); border: 1px solid rgb(238 218 188 / .3); border-radius: 6px; }
 .mission__action { position: absolute; left: 50%; bottom: 64px; transform: translateX(-50%); display: grid; justify-items: center; gap: 14px; width: min(300px, 30vw); }
 .scan-prompt { width: 100%; display: grid; gap: 8px; padding: 16px; background: rgb(29 24 21 / .95); border: 1px solid #9b927b; border-radius: 6px; }
 .scan-prompt > span { font: 9px var(--mono); letter-spacing: 1px; color: #b7cbb0; }
