@@ -370,5 +370,7 @@ summary::-webkit-details-marker { display: none; }
   .comparison__table th .unit { display: inline; margin-left: 4px; }
 }
 @media (prefers-reduced-motion: reduce) {
-  *, *::before, *::after { animation: none !important; transition: none !important; }
+  :where(:not([data-hud-animations="on"], [data-hud-animations="on"] *)),
+  :where(:not([data-hud-animations="on"], [data-hud-animations="on"] *))::before,
+  :where(:not([data-hud-animations="on"], [data-hud-animations="on"] *))::after { animation: none !important; transition: none !important; }
 }

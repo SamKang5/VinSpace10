@@ -5,7 +5,7 @@ import { MODE_COLOR, MODE_LABEL } from '../lib/theme';
 import { Icon } from '../components/Icon';
 import MissionScene from './MissionScene';
 import { cellPosition, createMission, createSurveys, distance, missionBudget, missionScore,
-  positionCell, SCAN_RADIUS, SCAN_SECONDS, type MissionState, type Survey } from './missionModel';
+  positionCell, SCAN_RADIUS, SCAN_SECONDS, SCIENCE_POINTS_PER_SURVEY, type MissionState, type Survey } from './missionModel';
 import './mission.css';
 
 type Props = { data: AppData; image: HTMLImageElement; start: GridPoint; end: GridPoint;
@@ -114,6 +114,8 @@ export default function MissionGame({ data, image, start, end, routes, selected,
   const [showRoutes, setShowRoutes] = useState(true);
   const [expanded, setExpanded] = useState(false);
   const [scanning, setScanning] = useState<Survey>();
+  const [pointGain, setPointGain] = useState<number>();
+  const [hudAnimations, setHudAnimations] = useState(true);
   const [notice, setNotice] = useState('Routes are suggestions. Explore freely and reach destination B.');
   const [recalculating, setRecalculating] = useState(false);
   const [graphicsError, setGraphicsError] = useState(false);
@@ -121,6 +123,7 @@ export default function MissionGame({ data, image, start, end, routes, selected,
   const [reducedMotion, setReducedMotion] = useState(() => window.matchMedia('(prefers-reduced-motion: reduce)').matches);
   const dialog = useRef<HTMLDialogElement>(null);
   const record = useRef<MissionState | null>(null);
+  const reportedScans = useRef(0);
   const rerouteTimer = useRef<number>();
   const originalShortest = routes.find(r => r.mode === 'shortest') ?? routes[0];
   const budget = missionBudget(originalShortest);
@@ -131,6 +134,7 @@ export default function MissionGame({ data, image, start, end, routes, selected,
   const cell = positionCell(hud.position);
   const slope = data.routing.slope[cell[0] * data.routing.width + cell[1]] ?? 0;
   const score = missionScore(hud);
+  const scienceScore = hud.scans.length * SCIENCE_POINTS_PER_SURVEY;
 
   const releasePointer = useCallback(() => { if (document.pointerLockElement) document.exitPointerLock(); }, []);
   const pause = useCallback(() => {
@@ -140,9 +144,11 @@ export default function MissionGame({ data, image, start, end, routes, selected,
   const blocked = useCallback(() => setNotice('This terrain is excluded or outside the mapped area. Choose another direction; the minimap marks excluded cells in red.'), []);
   const update = useCallback(() => {
     setHud({ ...mission, scans: [...mission.scans] });
-    if (scanning && mission.scans.includes(scanning.id)) {
-      setScanning(undefined);
-      setNotice('Survey recorded. +20 science points. Continue toward extraction beacon B.');
+    if (scanning && mission.scans.includes(scanning.id)) setScanning(undefined);
+    if (mission.scans.length > reportedScans.current) {
+      reportedScans.current = mission.scans.length;
+      setPointGain(mission.scans.length);
+      setNotice('Survey recorded. Continue toward extraction beacon B.');
     }
     if (mission.status !== 'active') {
       setPhase('results');
@@ -155,6 +161,11 @@ export default function MissionGame({ data, image, start, end, routes, selected,
     }
   }, [mission, guide, releasePointer, scanning]);
 
+  useEffect(() => {
+    if (pointGain === undefined) return;
+    const timeout = window.setTimeout(() => setPointGain(undefined), 1000);
+    return () => window.clearTimeout(timeout);
+  }, [pointGain]);
   useEffect(() => {
     const media = window.matchMedia('(prefers-reduced-motion: reduce)');
     const change = () => setReducedMotion(media.matches);
@@ -197,6 +208,11 @@ export default function MissionGame({ data, image, start, end, routes, selected,
       if (phase === 'playing' && event.code === 'KeyP' && !event.ctrlKey && !event.metaKey && !event.altKey) {
         event.preventDefault(); cyclePace();
       }
+      if (phase === 'playing' && event.code === 'KeyR' && !event.ctrlKey && !event.metaKey && !event.altKey) {
+        event.preventDefault();
+        setGuide(mode => mode === 'shortest' ? 'terrain-aware' : 'shortest');
+        setShowRoutes(true);
+      }
     };
     window.addEventListener('keydown', key);
     return () => window.removeEventListener('keydown', key);
@@ -206,6 +222,8 @@ export default function MissionGame({ data, image, start, end, routes, selected,
     releasePointer();
     const fresh = createMission(start);
     setHud(fresh); setRun(v => v + 1); setGuidance(routes); setScanning(undefined);
+    reportedScans.current = 0;
+    setPointGain(undefined);
     setNotice('New expedition. Your previous result is saved for comparison.'); setPhase('briefing');
   };
   const recalculate = () => {
@@ -227,7 +245,7 @@ export default function MissionGame({ data, image, start, end, routes, selected,
     <button className="mission-button" onClick={exit}>Back to planner</button>
   </div></section>;
 
-  return <section className="mission" aria-label="Mars surface expedition">
+  return <section className="mission" data-hud-animations={hudAnimations ? 'on' : 'off'} aria-label="Mars surface expedition">
     <div className="mission__world"><SceneBoundary onExit={exit} onError={() => setGraphicsError(true)}>
       <MissionScene key={run} data={data} image={image} start={start} end={end} routes={guidance}
         selected={guide} surveys={surveys} mission={mission} budget={budget} active={phase === 'playing'}
@@ -246,6 +264,7 @@ export default function MissionGame({ data, image, start, end, routes, selected,
           <span>Mission time <b>{clock(hud.elapsed)}</b></span><span aria-hidden="true">·</span>
           <span><b>{meters(hud.distance)}</b> walked</span>
         </div>
+        <div className="mission__science" role="status">Science score <b>{scienceScore}</b></div>
       </div>
       <button type="button" className="mission__pause" onClick={pause} aria-keyshortcuts="Escape">Pause <kbd>Esc</kbd></button>
     </header>
@@ -254,14 +273,14 @@ export default function MissionGame({ data, image, start, end, routes, selected,
       <div className="mission__terrain"><span>Cell {cell[0]}, {cell[1]}</span><span>Slope {Math.max(0, slope).toFixed(1)}°</span>
         <span>{hud.scans.length} / {surveys.length} surveys</span></div>
       <div className="mission__keys"><span><kbd>W A S D</kbd> Move</span>
-        <span>Click / drag to look</span><span>Scroll to zoom</span></div>
+        <span>Click / drag to look</span><span>Scroll to zoom</span><span><kbd>R</kbd> Switch route</span></div>
     </aside>
 
     <aside className={`mission-map${expanded ? ' mission-map--expanded' : ''}`} aria-label="Navigation assistant">
       <header><button className="mission-text-button mission-map__toggle" onClick={() => setExpanded(v => !v)}
         aria-label={expanded ? 'Minimize map' : 'Expand map'} aria-expanded={expanded} aria-keyshortcuts="M"><kbd>M</kbd></button>
-        <div className="mission-map__routes" role="group" aria-label="Highlighted route">{(['shortest', 'terrain-aware'] as RouteMode[]).map(mode => <button key={mode}
-          style={{ '--guide-color': MODE_COLOR[mode] } as React.CSSProperties} aria-pressed={guide === mode}
+        <div className="mission-map__routes" role="group" aria-label="Highlighted route" aria-keyshortcuts="R" title="Press R to switch the highlighted route">{(['shortest', 'terrain-aware'] as RouteMode[]).map(mode => <button key={mode}
+          style={{ '--guide-color': MODE_COLOR[mode] } as React.CSSProperties} aria-pressed={showRoutes && guide === mode}
           onClick={() => { setGuide(mode); setShowRoutes(true); }}>{mode === 'shortest' ? 'Shortest' : 'Terrain-aware'}</button>)}</div>
       </header>
       <MissionMap data={data} image={image} hud={hud} routes={guidance} selected={guide} surveys={surveys} start={start} end={end} showRoutes={showRoutes} />
@@ -271,11 +290,15 @@ export default function MissionGame({ data, image, start, end, routes, selected,
       </div>
     </aside>
 
+    {phase === 'playing' && pointGain !== undefined && <div key={pointGain} className="mission__point-gain" aria-hidden="true">
+      +{SCIENCE_POINTS_PER_SURVEY} <span>points</span>
+    </div>}
+
     <div className="mission__action">
       {(inRange || scanning) && <button type="button" className="scan-prompt" data-scanning={Boolean(scanning)}
         disabled={phase !== 'playing'} onClick={scan} aria-keyshortcuts="E" aria-label={scanning ? 'Cancel scan' : undefined}>
         {scanning ? <progress value={hud.scanProgress} max={SCAN_SECONDS} aria-label="Survey scan progress" />
-          : <><kbd>E</kbd><span>Scan <span className="scan-prompt__points">(+20 points)</span></span></>}
+          : <><kbd>E</kbd><span>Scan <span className="scan-prompt__points">(+{SCIENCE_POINTS_PER_SURVEY} points)</span></span></>}
       </button>}
       <button type="button" className="mission__pace" onClick={cyclePace} aria-keyshortcuts="P"
         aria-label={`Cycle travel pace. Current pace: ${pace.scale}× ${pace.label}`}>
@@ -299,7 +322,7 @@ export default function MissionGame({ data, image, start, end, routes, selected,
       {phase === 'briefing' && <>
         <span className="mission-dialog__label">Mission briefing</span>
         <h1 id="mission-dialog-title">Reach extraction beacon B.</h1>
-        <p>Scan survey flags along the route for 20 points each.</p>
+        <p>Scan survey flags along the route for {SCIENCE_POINTS_PER_SURVEY} points each.</p>
         <dl className="mission-dialog__facts">
           <div><dt>Planned distance</dt><dd>{meters(routes.find(route => route.mode === guide)?.distanceMeters ?? recommended)}</dd></div>
           <div><dt>Navigation guide</dt><dd>{MODE_LABEL[guide]}</dd></div>
@@ -311,6 +334,7 @@ export default function MissionGame({ data, image, start, end, routes, selected,
         <span className="mission-dialog__label">EXPEDITION PAUSED</span><h1 id="mission-dialog-title">Take your bearings.</h1>
         <p>Your oxygen, energy, and mission clock are paused. Resume when you are ready.</p>
         <div className="mission-dialog__navigation"><label><input type="checkbox" checked={showRoutes} onChange={e => setShowRoutes(e.target.checked)} /> Show guidance</label>
+          <label><input type="checkbox" checked={hudAnimations} onChange={e => setHudAnimations(e.target.checked)} /> HUD animations</label>
           <button className="mission-text-button" disabled={recalculating} onClick={recalculate}>{recalculating ? 'Calculating…' : 'Recalculate route'}</button></div>
         <div className="mission-dialog__buttons"><button className="mission-button mission-button--primary" autoFocus onClick={() => setPhase('playing')}>Resume expedition</button>
           <button className="mission-button" onClick={restart}>Restart mission</button><button className="mission-text-button" onClick={exit}>Back to planner</button></div>
@@ -323,7 +347,7 @@ export default function MissionGame({ data, image, start, end, routes, selected,
         <dl className="mission-dialog__facts mission-dialog__facts--results">
           <div><dt>Distance walked</dt><dd>{meters(hud.distance)}</dd></div><div><dt>Mission time</dt><dd>{clock(hud.elapsed)}</dd></div>
           <div><dt>Oxygen / Energy</dt><dd>{Math.ceil(hud.oxygen)}% / {Math.ceil(hud.energy)}%</dd></div>
-          <div><dt>Science scans</dt><dd>{hud.scans.length} (+{hud.scans.length * 20})</dd></div>
+          <div><dt>Science scans</dt><dd>{hud.scans.length} (+{scienceScore})</dd></div>
           <div><dt>Efficiency bonus</dt><dd>+{score.efficiency}</dd></div><div><dt>Risk penalty</dt><dd>−{score.riskPenalty}</dd></div>
         </dl>
         <p className="mission-dialog__note">Shortest planned: {meters(recommended)}. Actual travel: {meters(hud.distance)}. Route guidance does not constrain where you walk. Risk is a gameplay index, not a safety assessment.</p>

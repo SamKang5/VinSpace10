@@ -35,6 +35,16 @@
 .suit-meter meter::-moz-meter-bar { background: var(--reserve-color); }
 .mission__telemetry { display: flex; justify-content: center; gap: 8px; margin-top: 4px; color: #f0e0cd; font: 10px var(--mono); text-shadow: 0 1px 4px #281d15; white-space: nowrap; }
 .mission__telemetry b { color: #f5eee2; font-weight: 600; }
+.mission__science { margin-top: 5px; color: #edcd9c; font: 10px var(--mono); text-shadow: 0 1px 4px #281d15; }
+.mission__science b { margin-left: 4px; color: #f5eee2; font-size: 14px; }
+.mission__point-gain { position: absolute; z-index: 1; top: 42%; left: 50%; transform: translateX(-50%); pointer-events: none; white-space: nowrap; color: #ffe0ac; font: 650 clamp(24px, 4vw, 38px) var(--mono); text-shadow: 0 2px 6px #281d15; animation: mission-point-gain 1s cubic-bezier(.2,.65,.3,1) both; }
+.mission__point-gain span { font-size: .38em; }
+@keyframes mission-point-gain {
+  0% { opacity: 0; transform: translate(-50%, 8px) scale(.9); }
+  18% { opacity: 1; transform: translate(-50%, 0) scale(1.06); }
+  55% { opacity: 1; transform: translate(-50%, -14px) scale(1); }
+  100% { opacity: 0; transform: translate(-50%, -36px); }
+}
 .mission__context { position: absolute; left: 28px; bottom: 64px; width: min(350px, 28vw); display: grid; gap: 15px; pointer-events: none; }
 .mission__comms { max-width: 320px; margin-top: 14px; padding-left: 10px; border-left: 2px solid #dcb37b; text-shadow: 0 1px 4px #281d15; }
 .mission__comms > span { font: 10px var(--mono); letter-spacing: 1px; color: #e7c591; }
@@ -135,4 +145,6 @@
   .mission__keys { display: none; }
   .mission-dialog { max-height: calc(100dvh - 24px); padding: 22px; }
 }
-@media (prefers-reduced-motion: reduce) { .mission *, .mission-dialog[open] { animation: none; transition: none; } }
+.mission[data-hud-animations="off"] *,
+.mission[data-hud-animations="off"] *::before,
+.mission[data-hud-animations="off"] *::after { animation: none !important; transition: none !important; }

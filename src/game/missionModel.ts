@@ -6,6 +6,7 @@ export const CELL_X = CELL_M * Math.cos((GRID_ORIGIN_Y - 267 * CELL_M / 2) / MAR
 export const CELL_Z = CELL_M;
 export const WALK_SPEED = 1.7;
 export const SCAN_SECONDS = 45;
+export const SCIENCE_POINTS_PER_SURVEY = 20;
 export const SCAN_RADIUS = 28;
 export const ARRIVAL_RADIUS = 7;
 export type Position = { x: number; z: number };
@@ -118,7 +119,7 @@ export function missionScore(state: MissionState) {
   const efficiency = Math.round((state.oxygen + state.energy) / 200 * 30);
   const riskPenalty = Math.min(30, Math.round(state.risk / Math.max(1, state.distance) * 20));
   return { efficiency, riskPenalty, total: Math.max(0,
-    (state.status === 'success' ? 100 : 0) + state.scans.length * 20 + efficiency - riskPenalty) };
+    (state.status === 'success' ? 100 : 0) + state.scans.length * SCIENCE_POINTS_PER_SURVEY + efficiency - riskPenalty) };
 }
 
 export function createSurveys(grid: RoutingGrid, routes: RouteResult[]): Survey[] {

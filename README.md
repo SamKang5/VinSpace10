@@ -43,6 +43,7 @@ return.
 - **Mouse wheel:** adjust camera distance.
 - **E:** scan a nearby simulated survey site, or cancel the current scan.
 - **M:** expand or minimize the north-up navigation map.
+- **R:** switch the route highlight between Shortest and Terrain-aware.
 - **Escape:** pause. Switching away from the browser also pauses the mission.
 
 The navigation assistant shows both route modes, your actual trail, excluded
