@@ -106,8 +106,9 @@
 .mission-debrief__map .mission-map__canvas { border: 1px solid #84735e; box-shadow: none; }
 .mission-debrief__legend { display: flex; flex-wrap: wrap; gap: 6px 14px; margin: 9px 0 0; padding: 0; list-style: none; color: #e7dbcd; font: 10px var(--mono); }
 .mission-debrief__legend li { display: flex; align-items: center; gap: 5px; white-space: nowrap; }
-.mission-debrief__legend li::before { content: ''; width: 15px; border-top: 2px solid #61dff5; }
-.mission-debrief__legend .mission-debrief__planned::before { border-top: 2px dashed #fff4d8; }
+.mission-debrief__legend li::before { content: ''; width: 15px; border-top: 2px solid #fff4d8; }
+.mission-debrief__legend .mission-debrief__shortest::before { border-color: #38bdf8; }
+.mission-debrief__legend .mission-debrief__terrain-aware::before { border-top: 2px dashed #f0a9da; }
 .mission-debrief__legend .mission-debrief__survey::before { content: '✓'; width: 12px; height: 12px; border: 0; border-radius: 50%; text-align: center; line-height: 12px; color: #253323; background: #b8ca9c; }
 .mission-debrief__legend .mission-debrief__stop::before { width: 10px; height: 10px; border: 1px solid #ffae94; border-radius: 50%; }
 .mission-debrief__summary { align-self: start; padding-left: 20px; border-left: 1px solid #504338; }

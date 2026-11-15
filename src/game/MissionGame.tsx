@@ -64,15 +64,15 @@ function MissionMap({ data, image, hud, routes, selected, surveys, start, end, s
     ctx.drawImage(base, 0, 0);
     ctx.fillStyle = 'rgba(20,17,15,.18)'; ctx.fillRect(0, 0, 534, 534);
     if (showRoutes) routes.forEach(result => {
-      ctx.beginPath(); ctx.strokeStyle = debrief ? '#fff4d8' : MODE_COLOR[result.mode];
-      ctx.lineWidth = debrief ? 6 : result.mode === selected ? 4 : 2;
-      ctx.globalAlpha = result.mode === selected ? 1 : 0.55;
-      ctx.setLineDash(debrief || result.mode === 'terrain-aware' ? [9, 6] : []);
+      ctx.beginPath(); ctx.strokeStyle = MODE_COLOR[result.mode];
+      ctx.lineWidth = debrief ? (result.mode === 'shortest' ? 7.5 : 5) : (result.mode === selected ? 4 : 2);
+      ctx.globalAlpha = debrief || result.mode === selected ? 1 : 0.55;
+      ctx.setLineDash(result.mode === 'terrain-aware' ? [9, 6] : []);
       result.path.forEach((cell, i) => { const [x, y] = xy(cell); if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y); });
       ctx.stroke();
     });
     ctx.globalAlpha = 1; ctx.setLineDash([]);
-    ctx.strokeStyle = debrief ? '#61dff5' : '#fff4d8'; ctx.lineWidth = debrief ? 3.5 : 2;
+    ctx.strokeStyle = '#fff4d8'; ctx.lineWidth = debrief ? 2.5 : 2;
     ctx.lineJoin = 'round'; ctx.beginPath();
     hud.trail.forEach((p, i) => {
       const [x, y] = xy([p.z / CELL_Z, p.x / CELL_X]);
@@ -107,7 +107,7 @@ function MissionMap({ data, image, hud, routes, selected, surveys, start, end, s
   }, [base, data, hud, routes, selected, surveys, start, end, showRoutes, debrief]);
   return <canvas className="mission-map__canvas" width={534} height={534}
     ref={canvasRef} role="img" aria-label={debrief
-      ? `North-up debrief map. Dashed ivory: planned route. Solid cyan: actual trail. Green checks: completed surveys.${hud.status === 'failed' ? ' Coral ring: where you stopped.' : ''} A: start, B: destination.`
+      ? `North-up debrief map. Cyan: Shortest route. Dashed lavender: Terrain-aware route. Ivory: actual trail. Green checks: completed surveys.${hud.status === 'failed' ? ' Coral ring: where you stopped.' : ''} A: start, B: destination.`
       : 'North-up mission map. White dot: your position. White trail: your journey. Red terrain: excluded. A: start, B: destination.'} />;
 }
 
@@ -373,10 +373,11 @@ export default function MissionGame({ data, image, start, end, routes, selected,
         {!completed && <p className="mission-debrief__failure">{hud.failure}.</p>}
         <div className="mission-debrief">
           <figure className="mission-debrief__map">
-            <MissionMap data={data} image={image} hud={hud} routes={[departureRoute]} selected={departureRoute.mode}
+            <MissionMap data={data} image={image} hud={hud} routes={routes} selected={departureRoute.mode}
               surveys={surveys} start={start} end={end} showRoutes debrief />
             <ul className="mission-debrief__legend" aria-label="Map legend">
-              <li className="mission-debrief__planned">Planned route</li>
+              <li className="mission-debrief__shortest">Shortest route</li>
+              <li className="mission-debrief__terrain-aware">Terrain-aware route</li>
               <li className="mission-debrief__actual">Actual trail</li>
               <li className="mission-debrief__survey">Survey completed</li>
               {!completed && <li className="mission-debrief__stop">Stopped here</li>}
@@ -395,7 +396,7 @@ export default function MissionGame({ data, image, start, end, routes, selected,
               </dl>
             </section>
             <dl className="mission-debrief__stats">
-              <div><dt>Planned distance</dt><dd>{meters(plannedDistance)}</dd></div>
+              <div><dt>Planned at departure</dt><dd>{meters(plannedDistance)}</dd></div>
               <div><dt>Distance walked</dt><dd>{meters(hud.distance)}</dd></div>
             </dl>
             <p className="mission-debrief__comparison">{completed
