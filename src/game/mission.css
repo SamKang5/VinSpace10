@@ -120,7 +120,7 @@
 .mission-debrief__stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 .mission-debrief__stats dt, .mission-debrief__metrics dt { margin-bottom: 5px; color: #c8bbac; font: 11px var(--mono); }
 .mission-debrief__stats dd, .mission-debrief__metrics dd { margin: 0; font: 550 clamp(16px, 2vw, 21px) var(--mono); }
-.mission-debrief__stats .mission-debrief__subtext, .mission-debrief__comparison { margin-top: 5px; font: 12px/1.5 'Host Grotesk', system-ui, sans-serif; color: #edcd9c; }
+.mission-debrief__comparison { margin-top: 5px; font: 12px/1.5 'Host Grotesk', system-ui, sans-serif; color: #edcd9c; }
 .mission-debrief__metrics { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .mission-debrief__metrics dd { font-size: 15px; }
 .mission-history { margin-top: 16px; padding-top: 12px; border-top: 1px solid #504338; }

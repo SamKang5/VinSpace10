@@ -107,7 +107,7 @@ function MissionMap({ data, image, hud, routes, selected, surveys, start, end, s
   }, [base, data, hud, routes, selected, surveys, start, end, showRoutes, debrief]);
   return <canvas className="mission-map__canvas" width={534} height={534}
     ref={canvasRef} role="img" aria-label={debrief
-      ? `North-up debrief map. Dashed ivory: planned route. Cyan: actual trail. Green checks: completed surveys.${hud.status === 'failed' ? ' Coral ring: where you stopped.' : ''} A: start, B: destination.`
+      ? `North-up debrief map. Dashed ivory: planned route. Solid cyan: actual trail. Green checks: completed surveys.${hud.status === 'failed' ? ' Coral ring: where you stopped.' : ''} A: start, B: destination.`
       : 'North-up mission map. White dot: your position. White trail: your journey. Red terrain: excluded. A: start, B: destination.'} />;
 }
 
@@ -139,7 +139,7 @@ export default function MissionGame({ data, image, start, end, routes, selected,
   const [notice, setNotice] = useState('Routes are suggestions. Explore freely and reach destination B.');
   const [recalculating, setRecalculating] = useState(false);
   const [graphicsError, setGraphicsError] = useState(false);
-  const [history, setHistory] = useState<{ distance: number; elapsed: number; score: number; success: boolean; guide: RouteMode }[]>([]);
+  const [history, setHistory] = useState<{ distance: number; elapsed: number; score: number; success: boolean }[]>([]);
   const [reducedMotion, setReducedMotion] = useState(() => window.matchMedia('(prefers-reduced-motion: reduce)').matches);
   const dialog = useRef<HTMLDialogElement>(null);
   const record = useRef<MissionState | null>(null);
@@ -175,10 +175,10 @@ export default function MissionGame({ data, image, start, end, routes, selected,
       if (record.current !== mission) {
         record.current = mission;
         setHistory(previous => [...previous.slice(-4), { distance: mission.distance, elapsed: mission.elapsed,
-          score: missionScore(mission).total, success: mission.status === 'success', guide: departureRoute.mode }]);
+          score: missionScore(mission).total, success: mission.status === 'success' }]);
       }
     }
-  }, [mission, departureRoute, releasePointer, scanning]);
+  }, [mission, releasePointer, scanning]);
 
   useEffect(() => {
     if (pointGain === undefined) return;
@@ -395,7 +395,7 @@ export default function MissionGame({ data, image, start, end, routes, selected,
               </dl>
             </section>
             <dl className="mission-debrief__stats">
-              <div><dt>Planned distance</dt><dd>{meters(plannedDistance)}</dd><dd className="mission-debrief__subtext">{MODE_LABEL[departureRoute.mode]}</dd></div>
+              <div><dt>Planned distance</dt><dd>{meters(plannedDistance)}</dd></div>
               <div><dt>Distance walked</dt><dd>{meters(hud.distance)}</dd></div>
             </dl>
             <p className="mission-debrief__comparison">{completed
@@ -409,7 +409,7 @@ export default function MissionGame({ data, image, start, end, routes, selected,
           <div><dt>Energy left</dt><dd>{Math.ceil(hud.energy)}%</dd></div>
           <div><dt>Surveys completed</dt><dd>{hud.scans.length} / {surveys.length}</dd></div>
         </dl>
-        {history.length > 1 && <div className="mission-history"><h2>Previous run</h2><p>{history[history.length - 2].success ? 'Completed' : 'Incomplete'} with {MODE_LABEL[history[history.length - 2].guide].toLowerCase()} guidance: {history[history.length - 2].score} points, {meters(history[history.length - 2].distance)}, {clock(history[history.length - 2].elapsed)}.</p></div>}
+        {history.length > 1 && <div className="mission-history"><h2>Previous run</h2><p>{history[history.length - 2].success ? 'Completed' : 'Incomplete'} · {history[history.length - 2].score} points, {meters(history[history.length - 2].distance)}, {clock(history[history.length - 2].elapsed)}.</p></div>}
         <div className="mission-dialog__buttons"><button className="mission-button mission-button--primary" onClick={restart}>Play again</button>
           <button className="mission-text-button" onClick={exit}>Back to planner</button></div>
       </>}
