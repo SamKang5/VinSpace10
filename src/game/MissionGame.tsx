@@ -270,11 +270,11 @@ export default function MissionGame({ data, image, start, end, routes, selected,
     </aside>
 
     <div className="mission__action">
-      {(inRange || scanning) && <div className="scan-prompt"><span>SIMULATED SURVEY</span><strong>{(scanning ?? inRange)?.name}</strong>
-        <p>{(scanning ?? inRange)?.description}</p>
-        <button className="mission-button mission-button--primary" disabled={phase !== 'playing'} onClick={scan}>
-          {scanning ? `Cancel scan ${Math.floor(hud.scanProgress / SCAN_SECONDS * 100)}%` : 'Scan +20 points'} <kbd>E</kbd>
-        </button>{scanning && <progress value={hud.scanProgress} max={SCAN_SECONDS} aria-label="Survey scan progress" />}</div>}
+      {(inRange || scanning) && <button type="button" className="scan-prompt" data-scanning={Boolean(scanning)}
+        disabled={phase !== 'playing'} onClick={scan} aria-keyshortcuts="E" aria-label={scanning ? 'Cancel scan' : undefined}>
+        {scanning ? <progress value={hud.scanProgress} max={SCAN_SECONDS} aria-label="Survey scan progress" />
+          : <><kbd>E</kbd><span>Scan <span className="scan-prompt__points">(+20 points)</span></span></>}
+      </button>}
       <button type="button" className="mission__pace" onClick={cyclePace} aria-keyshortcuts="P"
         aria-label={`Cycle travel pace. Current pace: ${pace.scale}× ${pace.label}`}>
         <span className="mission__pace-caption" aria-hidden="true">Travel pace <kbd>P</kbd></span>
