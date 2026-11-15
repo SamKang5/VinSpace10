@@ -31,6 +31,44 @@ npm run build
 npm run preview
 ```
 
+## 3D surface expedition
+
+Use the existing planner to choose connected points A and B, then select **Start
+mission**. A separate, lazily loaded Three.js / React Three Fiber module opens
+with a mission briefing. The planner and its endpoints are preserved when you
+return.
+
+- **WASD / arrow keys:** walk freely. Routes are optional navigation guidance.
+- **Shift:** sprint, using more oxygen and energy.
+- **Mouse:** click for mouse look, or drag if pointer lock is unavailable.
+- **Mouse wheel:** adjust camera distance.
+- **E:** scan a nearby simulated survey site, or cancel the current scan.
+- **M:** expand or minimize the north-up navigation map.
+- **Escape:** pause. Switching away from the browser also pauses the mission.
+
+The navigation assistant shows both route modes, your actual trail, excluded
+cells, and survey sites. **Recalculate** runs the existing A* algorithm from your
+current cell. It does not replenish resources. Reach beacon B before oxygen or
+energy runs out. Replay retains recent results for comparison within that game
+session; returning to the planner ends the session.
+
+Travel starts at **12× expedition time**, with 1× and 30× options. The same clock
+drives movement, oxygen, energy, and scanning. A scan takes 45 simulated seconds
+and awards 20 points once per site. Reserves use a shared budget based on the
+shortest planned distance; terrain friction and sprinting increase energy use.
+Scores combine completion, scans, remaining reserves, and a slope-based risk
+penalty. These are tunable gameplay assumptions, not life-support predictions.
+
+Terrain uses the verified 20 m DEM, the existing CTX texture registration, and
+the planner's blocked/unknown-cell policy. Fine grain, small stones, color,
+astronaut, flags, and survey sites are artistic or simulated. They do not add
+scientific observations or measured terrain detail. This first version targets
+desktop browsers with a keyboard and WebGL 2; no full physics engine is used.
+
+`tests/mission.test.ts` covers movement restrictions, height sampling, resource
+accounting, scanning, mission outcomes, and restart behavior. Run it together
+with the navigation checks using `npm run check`.
+
 ## Scripts
 
 | Command | What it does |

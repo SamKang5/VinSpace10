@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Component, lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { ControlPanel } from './components/ControlPanel';
 import { HowToModal } from './components/HowToModal';
 import { Icon } from './components/Icon';
@@ -14,6 +14,17 @@ import { MODE_COLOR, MODE_DASHED, MODE_ORDER } from './lib/theme';
 
 const EXAMPLE_START: GridPoint = [230, 30];
 const EXAMPLE_END: GridPoint = [35, 235];
+
+const MissionGame = lazy(() => import('./game/MissionGame'));
+class MissionLoadBoundary extends Component<{ children: ReactNode; onExit: () => void }, { error: boolean }> {
+  state = { error: false };
+  static getDerivedStateFromError() { return { error: true }; }
+  render() {
+    return this.state.error ? <div className="mission-loading" role="alert"><h2>Mission could not load</h2>
+      <p>Return to the planner and refresh the page to try again.</p>
+      <button className="btn" onClick={this.props.onExit}>Back to planner</button></div> : this.props.children;
+  }
+}
 
 type Results = Partial<Record<RouteMode, RouteResult>>;
 
@@ -61,6 +72,8 @@ export default function App() {
   const [howToOpen, setHowToOpen] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(false);
   const [placementError, setPlacementError] = useState<string | null>(null);
+  const [missionOpen, setMissionOpen] = useState(false);
+  const launchButton = useRef<HTMLButtonElement>(null);
   const inspectorToggle = useRef<HTMLButtonElement>(null);
   const inspectorClose = useRef<HTMLButtonElement>(null);
   const layers = useRef<HTMLDetailsElement>(null);
@@ -212,6 +225,21 @@ export default function App() {
       '. Friction index ' + (selectedInfo.cost?.toFixed(2) ?? 'unavailable') + '.'
     : '';
 
+  const missionRoutes = MODE_ORDER.flatMap(key => results[key]?.status === 'ok' ? [results[key]!] : []);
+  const closeMission = () => {
+    setMissionOpen(false);
+    requestAnimationFrame(() => launchButton.current?.focus());
+  };
+
+  if (missionOpen && loaded && start && end && missionRoutes.length === 2) return (
+    <MissionLoadBoundary onExit={closeMission}>
+      <Suspense fallback={<div className="mission-loading" role="status"><h2>Preparing your expedition</h2><p>Loading 3D terrain and suit systems…</p></div>}>
+        <MissionGame data={loaded.data} image={loaded.image} start={start} end={end}
+          routes={missionRoutes} selected={mode} onExit={closeMission} />
+      </Suspense>
+    </MissionLoadBoundary>
+  );
+
   return (
     <div className="app">
       <a className="skip-link" href="#main">Skip to map</a>
@@ -221,6 +249,10 @@ export default function App() {
           <p>Jezero Crater</p>
         </div>
         <div className="app__tools">
+          <button type="button" className="btn start-mission" ref={launchButton}
+            disabled={calculating || missionRoutes.length !== 2 || !start || !end}
+            title={missionRoutes.length === 2 ? 'Explore this mission in 3D' : 'Choose two connected points to start a mission'}
+            onClick={() => { setHowToOpen(false); setMissionOpen(true); }}>Start mission</button>
           {data && <>
             <details className="layers" ref={layers} onToggle={(event) => {
               if (event.currentTarget.open) setInspectorOpen(false);
