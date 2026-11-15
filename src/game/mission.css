@@ -22,15 +22,15 @@
 .mission-text-button:hover { text-decoration: underline; }
 .mission-text-button:disabled { opacity: .5; }
 .mission kbd { font: 10px var(--mono); padding: 3px 5px; border: 1px solid currentColor; border-radius: 3px; white-space: nowrap; }
-.suit-meters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 4px; padding: 9px 12px; border-radius: 5px; background: var(--map-frame-fill); border: 1px solid rgb(238 218 188 / .22); }
-.suit-meter { display: grid; grid-template-columns: 16px minmax(0, 1fr) 4ch; gap: 5px; align-items: center; color: var(--reserve-color); font: 10px var(--mono); }
+.suit-meters { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-top: 8px; padding-inline: 2px; }
+.suit-meter { --reserve-track: rgb(245 238 226 / .22); display: grid; grid-template-columns: 16px minmax(0, 1fr) 4ch; gap: 5px; align-items: center; color: #f5eee2; font: 10px var(--mono); text-shadow: 0 1px 4px #281d15; }
 .suit-meter--oxygen { --reserve-color: #b8ca9c; }
 .suit-meter--energy { --reserve-color: #efbf7a; }
 .suit-meter[data-low="true"] { --reserve-color: #ff9f7f; }
-.suit-meter svg { width: 16px; height: 16px; }
+.suit-meter svg { width: 16px; height: 16px; filter: drop-shadow(0 1px 2px #281d15); }
 .suit-meter > span { text-align: right; }
-.suit-meter meter { appearance: none; display: block; width: 100%; height: 7px; border: 0; border-radius: 0; background: #55463a; }
-.suit-meter meter::-webkit-meter-bar { height: 7px; background: #55463a; border: 0; border-radius: 0; }
+.suit-meter meter { appearance: none; display: block; width: 100%; height: 6px; border: 0; border-radius: 0; background: var(--reserve-track); }
+.suit-meter meter::-webkit-meter-bar { height: 6px; background: transparent; border: 0; border-radius: 0; }
 .suit-meter meter::-webkit-meter-optimum-value { background: var(--reserve-color); }
 .suit-meter meter::-moz-meter-bar { background: var(--reserve-color); }
 .mission__telemetry { display: flex; justify-content: center; gap: 8px; margin-top: 4px; color: #f0e0cd; font: 10px var(--mono); text-shadow: 0 1px 4px #281d15; white-space: nowrap; }
@@ -52,14 +52,14 @@
 .mission__terrain, .mission__keys { display: flex; flex-wrap: wrap; gap: 9px 14px; font-size: 11px; color: #f0e0cd; text-shadow: 0 1px 3px #281d15; }
 .mission__terrain { font-family: var(--mono); }
 .mission__keys { line-height: 1.8; }
-.mission-map { --map-frame-fill: rgb(29 24 21 / .9); position: absolute; right: var(--map-inset); bottom: var(--map-inset); z-index: 1; width: 254px; }
+.mission-map { position: absolute; right: var(--map-inset); bottom: var(--map-inset); z-index: 1; width: 254px; }
 .mission-map > header { display: flex; align-items: center; justify-content: space-between; gap: 4px; margin-bottom: 4px; }
-.mission-map__toggle { display: grid; place-items: center; min-width: 28px; min-height: 36px; }
-.mission-map__toggle kbd { background: #29231f; }
-.mission-map__canvas { display: block; width: 100%; height: auto; aspect-ratio: 1; border: 3px solid var(--map-frame-fill); border-radius: 3px; }
+.mission-map__toggle { display: grid; place-items: center; min-width: 28px; min-height: 36px; color: #f5eee2; text-shadow: 0 1px 4px #281d15; }
+.mission-map__canvas { display: block; width: 100%; height: auto; aspect-ratio: 1; border: 2px solid #f5eee2; border-radius: 3px; box-shadow: 0 1px 4px rgb(40 29 21 / .45); }
 .mission-map__routes { display: flex; gap: 4px; }
-.mission-map__routes button { min-height: 36px; padding: 0 6px; border: 1px solid #78624f; border-bottom: 2px solid #78624f; border-radius: 4px; background: #29231f; color: #c8bbac; font-size: 11px; white-space: nowrap; }
-.mission-map__routes button[aria-pressed="true"] { border-color: var(--guide-color); color: #f5eee2; }
+.mission-map__routes button { min-height: 36px; padding: 0 4px; border: 0; background: transparent; color: #f0e0cd; font-size: 11px; text-shadow: 0 1px 4px #281d15; white-space: nowrap; }
+.mission-map__routes button:hover, .mission-map__routes button[aria-pressed="true"] { color: #fff7e8; }
+.mission-map__routes button[aria-pressed="true"] { text-decoration: underline; text-underline-offset: 5px; }
 .mission-map.mission-map--expanded { width: min(420px, 76vw, calc(100dvh - 152px)); z-index: 2; }
 .mission__action { position: absolute; left: 50%; bottom: 64px; transform: translateX(-50%); display: grid; justify-items: center; gap: 14px; width: min(300px, 30vw); }
 .scan-prompt { font-size: 14px; font-weight: 600; white-space: nowrap; }

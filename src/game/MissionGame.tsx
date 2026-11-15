@@ -280,7 +280,7 @@ export default function MissionGame({ data, image, start, end, routes, selected,
       <header><button className="mission-text-button mission-map__toggle" onClick={() => setExpanded(v => !v)}
         aria-label={expanded ? 'Minimize map' : 'Expand map'} aria-expanded={expanded} aria-keyshortcuts="M"><kbd>M</kbd></button>
         <div className="mission-map__routes" role="group" aria-label="Highlighted route" aria-keyshortcuts="R" title="Press R to switch the highlighted route">{(['shortest', 'terrain-aware'] as RouteMode[]).map(mode => <button key={mode}
-          style={{ '--guide-color': MODE_COLOR[mode] } as React.CSSProperties} aria-pressed={showRoutes && guide === mode}
+          aria-pressed={showRoutes && guide === mode}
           onClick={() => { setGuide(mode); setShowRoutes(true); }}>{mode === 'shortest' ? 'Shortest' : 'Terrain-aware'}</button>)}</div>
       </header>
       <MissionMap data={data} image={image} hud={hud} routes={guidance} selected={guide} surveys={surveys} start={start} end={end} showRoutes={showRoutes} />
