@@ -107,9 +107,10 @@ export default function MissionGame({ data, image, start, end, routes, selected,
   const [phase, setPhase] = useState<Phase>('briefing');
   const [guide, setGuide] = useState(selected);
   const [guidance, setGuidance] = useState(routes);
-  const [paceIndex, setPaceIndex] = useState(1);
+  const [paceStep, setPaceStep] = useState(1);
+  const paceIndex = paceStep % TRAVEL_PACES.length;
   const pace = TRAVEL_PACES[paceIndex];
-  const cyclePace = useCallback(() => setPaceIndex(index => (index + 1) % TRAVEL_PACES.length), []);
+  const cyclePace = useCallback(() => setPaceStep(step => step + 1), []);
   const [showRoutes, setShowRoutes] = useState(true);
   const [expanded, setExpanded] = useState(false);
   const [scanning, setScanning] = useState<Survey>();
@@ -276,7 +277,15 @@ export default function MissionGame({ data, image, start, end, routes, selected,
         </button>{scanning && <progress value={hud.scanProgress} max={SCAN_SECONDS} aria-label="Survey scan progress" />}</div>}
       <button type="button" className="mission__pace" onClick={cyclePace} aria-keyshortcuts="P"
         aria-label={`Cycle travel pace. Current pace: ${pace.scale}× ${pace.label}`}>
-        <span><small>Travel pace</small><strong>{pace.scale}× {pace.label}</strong></span><kbd>P</kbd>
+        <span className="mission__pace-caption" aria-hidden="true">Travel pace <kbd>P</kbd></span>
+        <span className="mission__pace-window" aria-hidden="true">
+          <span key={paceStep} className="mission__pace-track" data-rolling={paceStep > 1}>
+            {[-2, -1, 0, 1].map(offset => {
+              const option = TRAVEL_PACES[(paceIndex + TRAVEL_PACES.length + offset) % TRAVEL_PACES.length];
+              return <span key={offset}>{option.scale}×</span>;
+            })}
+          </span>
+        </span>
       </button>
     </div>
 

@@ -60,10 +60,20 @@
 .scan-prompt > strong { font-size: 17px; }
 .scan-prompt > p { font-size: 12px; line-height: 1.5; color: #d1c4b5; }
 .scan-prompt progress { width: 100%; height: 4px; accent-color: #d6dec5; }
-.mission__pace { gap: 12px; text-align: left; }
-.mission__pace > span { display: grid; gap: 3px; }
-.mission__pace small { color: #ffe0ac; font: 10px var(--mono); text-transform: uppercase; letter-spacing: .08em; }
-.mission__pace strong { font: 500 14px var(--mono); }
+.mission__pace { --pace-slot: 42px; display: grid; gap: 3px; font-family: var(--mono); }
+.mission__pace-caption { display: flex; align-items: center; justify-content: space-between; padding-inline: 3px; color: #ffe0ac; font-size: 9px; text-transform: uppercase; letter-spacing: .08em; }
+.mission__pace-caption kbd { padding: 1px 4px; }
+.mission__pace-window { position: relative; overflow: hidden; width: calc(3 * var(--pace-slot)); }
+.mission__pace-window::after { content: ''; position: absolute; inset: 1px var(--pace-slot); border-inline: 1px solid #ffe0ac; border-radius: 3px; pointer-events: none; }
+.mission__pace-track { display: grid; grid-auto-flow: column; grid-auto-columns: var(--pace-slot); width: max-content; transform: translateX(-25%); }
+.mission__pace-track > span { display: grid; place-items: center; height: 26px; font-size: 16px; font-weight: 600; opacity: .58; transform: scale(.75); }
+.mission__pace-track > span:nth-child(3) { opacity: 1; transform: scale(1); }
+.mission__pace-track[data-rolling="true"] { animation: pace-roll 180ms cubic-bezier(.2, .65, .3, 1); }
+.mission__pace-track[data-rolling="true"] > span:nth-child(2) { animation: pace-unselect 180ms ease-out; }
+.mission__pace-track[data-rolling="true"] > span:nth-child(3) { animation: pace-select 180ms ease-out; }
+@keyframes pace-roll { from { transform: translateX(0); } to { transform: translateX(-25%); } }
+@keyframes pace-unselect { from { opacity: 1; transform: scale(1); } }
+@keyframes pace-select { from { opacity: .58; transform: scale(.75); } }
 .mission__credit { position: absolute; left: 28px; right: 28px; bottom: 16px; font-size: 10px; line-height: 1.4; color: #f1e0cc; text-shadow: 0 1px 3px #281d15; pointer-events: none; }
 .mission-dialog { width: min(500px, calc(100vw - 32px)); max-height: calc(100dvh - 48px); overflow: auto; padding: 30px; margin: auto; color: #f5eee2; background: #241f1b; border: 1px solid #84735e; border-radius: 8px; box-shadow: 0 20px 80px rgb(32 24 18 / .4); }
 .mission-dialog::backdrop { background: rgb(28 23 19 / .55); }
