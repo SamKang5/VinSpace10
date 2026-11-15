@@ -251,7 +251,7 @@ export default function MissionGame({ data, image, start, end, routes, selected,
       <div className="mission__comms"><span>MISSION CONTROL</span><p role="status">{notice}</p></div>
       <div className="mission__terrain"><span>Cell {cell[0]}, {cell[1]}</span><span>Slope {Math.max(0, slope).toFixed(1)}°</span>
         <span>{hud.scans.length} / {surveys.length} surveys</span></div>
-      <div className="mission__keys"><span><kbd>W A S D</kbd> Move</span><span><kbd>Shift</kbd> Sprint</span>
+      <div className="mission__keys"><span><kbd>W A S D</kbd> Move</span>
         <span>Click / drag to look</span><span>Scroll to zoom</span></div>
     </aside>
 
@@ -291,19 +291,17 @@ export default function MissionGame({ data, image, start, end, routes, selected,
 
     <footer className="mission__credit">NASA / USGS terrain. Artistic color. Simulated resources and survey sites. Research prototype.</footer>
 
-    <dialog className="mission-dialog" ref={dialog} aria-labelledby="mission-dialog-title" onCancel={event => {
+    <dialog className={`mission-dialog${phase === 'briefing' ? ' mission-dialog--briefing' : ''}`} ref={dialog} aria-labelledby="mission-dialog-title" onCancel={event => {
       event.preventDefault(); if (phase === 'paused') setPhase('playing');
     }}>
       {phase === 'briefing' && <>
-        <span className="mission-dialog__label">MISSION BRIEFING</span>
-        <h1 id="mission-dialog-title">Your route.<br />Your expedition.</h1>
-        <p>Leave base A and reach the extraction beacon at B. Follow your navigation guide, or find your own way across Jezero.</p>
-        <dl className="mission-dialog__facts"><div><dt>Planned distance</dt><dd>{meters(recommended)}</dd></div>
-          <div><dt>Navigation guide</dt><dd>{MODE_LABEL[guide]}</dd></div><div><dt>Survey sites</dt><dd>{surveys.length} simulated</dd></div></dl>
-        <ul className="mission-dialog__instructions"><li><kbd>W A S D</kbd> Walk freely. Hold Shift to sprint.</li>
-          <li><kbd>Mouse</kbd> Click or drag the scene to look around.</li><li><kbd>E</kbd> Scan near survey flags for science points.</li>
-          <li><kbd>M</kbd> Expand your map. Escape pauses the mission.</li></ul>
-        <p className="mission-dialog__note">Red-tinted ground is excluded by the terrain model. Oxygen drains with time; walking and scanning use energy. Travel starts at 12× speed, including resource use. Reach B before either reserve runs out.</p>
+        <span className="mission-dialog__label">Mission briefing</span>
+        <h1 id="mission-dialog-title">Reach extraction beacon B.</h1>
+        <p>Scan survey flags along the route for 20 points each.</p>
+        <dl className="mission-dialog__facts">
+          <div><dt>Planned distance</dt><dd>{meters(routes.find(route => route.mode === guide)?.distanceMeters ?? recommended)}</dd></div>
+          <div><dt>Navigation guide</dt><dd>{MODE_LABEL[guide]}</dd></div>
+        </dl>
         <div className="mission-dialog__buttons"><button className="mission-button mission-button--primary" autoFocus onClick={() => setPhase('playing')}>Begin expedition</button>
           <button className="mission-text-button" onClick={exit}>Back to planner</button></div>
       </>}

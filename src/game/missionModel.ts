@@ -82,14 +82,13 @@ export function missionBudget(route: RouteResult): number {
 
 /** A fixed simulation tick owns movement, resources, scans and arrival. All rates are gameplay assumptions. */
 export function advanceMission(state: MissionState, grid: RoutingGrid, destination: GridPoint,
-  budget: number, seconds: number, direction: Position, sprint: boolean, survey?: Survey): void {
+  budget: number, seconds: number, direction: Position, survey?: Survey): void {
   if (state.status !== 'active' || seconds <= 0) return;
   const dt = Math.min(seconds, 0.25);
   const length = Math.hypot(direction.x, direction.z);
   const moving = length > 0 && !survey;
-  const speed = WALK_SPEED * (sprint ? 1.65 : 1);
   const next = moving ? movePlayer(grid, state.position,
-    direction.x / length * speed * dt, direction.z / length * speed * dt) : state.position;
+    direction.x / length * WALK_SPEED * dt, direction.z / length * WALK_SPEED * dt) : state.position;
   const travelled = distance(state.position, next);
   const cell = positionCell(next);
   const cost = grid.cost[cell[0] * grid.width + cell[1]];
@@ -97,9 +96,9 @@ export function advanceMission(state: MissionState, grid: RoutingGrid, destinati
   state.position = next;
   state.elapsed += dt;
   state.distance += travelled;
-  state.oxygen = Math.max(0, state.oxygen - dt / budget * 100 * (moving && sprint ? 1.18 : 1));
+  state.oxygen = Math.max(0, state.oxygen - dt / budget * 100);
   state.energy = Math.max(0, state.energy - travelled / (budget * WALK_SPEED) * 100 *
-    (0.7 + friction * 0.3) * (sprint ? 1.4 : 1) - (survey ? dt * 0.012 : 0));
+    (0.7 + friction * 0.3) - (survey ? dt * 0.012 : 0));
   if (travelled > 0) state.risk += travelled * (friction - 1);
   if (survey && !state.scans.includes(survey.id) && distance(next, survey.position) <= SCAN_RADIUS) {
     state.scanProgress += dt;

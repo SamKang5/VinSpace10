@@ -84,9 +84,10 @@
 .mission-dialog__facts > div { display: grid; gap: 5px; }
 .mission-dialog__facts dt { color: #bbaa98; font-size: 11px; }
 .mission-dialog__facts dd { font-size: 14px; }
-.mission-dialog__instructions { padding: 0; list-style: none; display: grid; gap: 12px; margin-bottom: 20px; }
-.mission-dialog__instructions li { display: flex; gap: 10px; align-items: center; font-size: 12px; color: #e7dbcd; }
-.mission-dialog__instructions kbd { min-width: 65px; text-align: center; }
+.mission-dialog--briefing h1 { font-size: clamp(24px, 4vw, 32px); letter-spacing: -.7px; margin-bottom: 8px; }
+.mission-dialog--briefing .mission-dialog__facts { margin: 20px 0 0; padding: 14px 0 0; border-bottom: 0; }
+.mission-dialog--briefing .mission-dialog__facts dd { font-size: 16px; }
+.mission-dialog--briefing .mission-dialog__facts > div:first-child dd { font-family: var(--mono); }
 .mission-dialog > .mission-dialog__note { font-size: 11px; line-height: 1.6; color: #baa993; }
 .mission-dialog__buttons { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 20px; margin-top: 22px; }
 .mission-dialog__navigation { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 20px; margin-top: 12px; }

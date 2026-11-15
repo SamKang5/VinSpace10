@@ -184,7 +184,7 @@ function World(props: SceneProps) {
     const canvas = gl.domElement;
     const down = (event: KeyboardEvent) => {
       if (!active || event.target instanceof HTMLInputElement || event.target instanceof HTMLSelectElement) return;
-      if (['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'ShiftLeft', 'ShiftRight'].includes(event.code)) {
+      if (['KeyW', 'KeyA', 'KeyS', 'KeyD', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.code)) {
         event.preventDefault(); input.current.keys.add(event.code);
       }
     };
@@ -232,8 +232,7 @@ function World(props: SceneProps) {
         z: -Math.cos(controls.yaw) * forward + Math.sin(controls.yaw) * right };
       accumulator.current += Math.min(delta, 0.1) * timeScale;
       while (accumulator.current >= 0.1 && mission.status === 'active') {
-        advanceMission(mission, data.routing, props.end, budget, 0.1, direction,
-          controls.keys.has('ShiftLeft') || controls.keys.has('ShiftRight'), scanning);
+        advanceMission(mission, data.routing, props.end, budget, 0.1, direction, scanning);
         accumulator.current -= 0.1;
       }
     }

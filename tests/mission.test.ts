@@ -33,52 +33,50 @@ test('free movement is independent of guidance, while blocked cells, unknowns an
 test('diagonal walking is normalized; accelerated time uses identical movement and resource accounting', () => {
   const g = grid(), straight = createMission([10, 10]), diagonal = createMission([10, 10]);
   for (let i = 0; i < 100; i++) {
-    advanceMission(straight, g, [39, 39], 1000, .1, { x: 1, z: 0 }, false);
-    advanceMission(diagonal, g, [39, 39], 1000, .1, { x: 1, z: 1 }, false);
+    advanceMission(straight, g, [39, 39], 1000, .1, { x: 1, z: 0 });
+    advanceMission(diagonal, g, [39, 39], 1000, .1, { x: 1, z: 1 });
   }
   assert.ok(Math.abs(straight.distance - WALK_SPEED * 10) < 1e-8);
   assert.ok(Math.abs(diagonal.distance - straight.distance) < 1e-8);
   assert.ok(Math.abs(diagonal.energy - straight.energy) < 1e-8);
   assert.ok(Math.abs(straight.oxygen - 99) < 1e-8);
   const previous = { ...straight };
-  advanceMission(straight, g, [39, 39], 1000, 0, { x: 1, z: 0 }, false);
+  advanceMission(straight, g, [39, 39], 1000, 0, { x: 1, z: 0 });
   assert.deepEqual(straight, previous);
 });
 
-test('sprinting and difficult terrain consume more resources than ordinary walking', () => {
-  const g = grid(), walking = createMission([10, 10]), sprinting = createMission([10, 10]);
-  advanceMission(walking, g, [39, 39], 1000, .1, { x: 1, z: 0 }, false);
-  advanceMission(sprinting, g, [39, 39], 1000, .1, { x: 1, z: 0 }, true);
-  assert.ok(sprinting.distance > walking.distance); assert.ok(sprinting.energy < walking.energy); assert.ok(sprinting.oxygen < walking.oxygen);
+test('difficult terrain increases energy use and risk', () => {
+  const g = grid(), walking = createMission([10, 10]);
+  advanceMission(walking, g, [39, 39], 1000, .1, { x: 1, z: 0 });
   const rough = createMission([10, 10]); g.cost.fill(2);
-  advanceMission(rough, g, [39, 39], 1000, .1, { x: 1, z: 0 }, false);
+  advanceMission(rough, g, [39, 39], 1000, .1, { x: 1, z: 0 });
   assert.ok(rough.energy < walking.energy); assert.ok(rough.risk > 0);
 });
 
 test('scans require proximity, consume time and energy, stop movement, and award each site once', () => {
   const g = grid(), mission = createMission([10, 10]);
   const site = { id: 1, name: 'Survey', description: 'Simulated', cell: [10, 10] as [number, number], position: cellPosition([10, 10]) };
-  for (let i = 0; i < SCAN_SECONDS * 10 + 1; i++) advanceMission(mission, g, [39, 39], 1000, .1, { x: 1, z: 0 }, false, site);
+  for (let i = 0; i < SCAN_SECONDS * 10 + 1; i++) advanceMission(mission, g, [39, 39], 1000, .1, { x: 1, z: 0 }, site);
   assert.deepEqual(mission.scans, [1]); assert.equal(mission.distance, 0); assert.ok(mission.oxygen < 100); assert.ok(mission.energy < 100);
-  for (let i = 0; i < 1000; i++) advanceMission(mission, g, [39, 39], 1000, .1, { x: 0, z: 0 }, false, site);
+  for (let i = 0; i < 1000; i++) advanceMission(mission, g, [39, 39], 1000, .1, { x: 0, z: 0 }, site);
   assert.deepEqual(mission.scans, [1]);
   const distant = { ...site, id: 2, position: cellPosition([20, 20]) };
-  advanceMission(mission, g, [39, 39], 1000, .1, { x: 0, z: 0 }, false, distant);
+  advanceMission(mission, g, [39, 39], 1000, .1, { x: 0, z: 0 }, distant);
   assert.equal(mission.scanProgress, 0); assert.equal(mission.scans.length, 1);
 });
 
 test('arrival succeeds, depletion fails, terminal state is frozen, and restart clears the journey', () => {
   const g = grid(), arrival = createMission([10, 10]);
-  advanceMission(arrival, g, [10, 10], 1000, .1, { x: 0, z: 0 }, false);
+  advanceMission(arrival, g, [10, 10], 1000, .1, { x: 0, z: 0 });
   assert.equal(arrival.status, 'success');
   const failed = createMission([10, 10]); failed.oxygen = .00001;
-  advanceMission(failed, g, [39, 39], 1000, .1, { x: 0, z: 0 }, false);
+  advanceMission(failed, g, [39, 39], 1000, .1, { x: 0, z: 0 });
   assert.equal(failed.status, 'failed'); assert.equal(failed.failure, 'Oxygen reserve depleted');
   const stoppedAt = { ...failed.position }, stoppedTime = failed.elapsed;
-  advanceMission(failed, g, [39, 39], 1000, .1, { x: 1, z: 0 }, false);
+  advanceMission(failed, g, [39, 39], 1000, .1, { x: 1, z: 0 });
   assert.deepEqual(failed.position, stoppedAt); assert.equal(failed.elapsed, stoppedTime);
   const emptyEnergy = createMission([10, 10]); emptyEnergy.energy = 0;
-  advanceMission(emptyEnergy, g, [39, 39], 1000, .1, { x: 1, z: 0 }, false);
+  advanceMission(emptyEnergy, g, [39, 39], 1000, .1, { x: 1, z: 0 });
   assert.equal(emptyEnergy.failure, 'Suit energy depleted');
   const fresh = createMission([10, 10]); assert.equal(fresh.energy, 100); assert.equal(fresh.distance, 0); assert.deepEqual(fresh.scans, []);
 });

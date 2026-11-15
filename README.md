@@ -39,7 +39,6 @@ with a mission briefing. The planner and its endpoints are preserved when you
 return.
 
 - **WASD / arrow keys:** walk freely. Routes are optional navigation guidance.
-- **Shift:** sprint, using more oxygen and energy.
 - **Mouse:** click for mouse look, or drag if pointer lock is unavailable.
 - **Mouse wheel:** adjust camera distance.
 - **E:** scan a nearby simulated survey site, or cancel the current scan.
@@ -55,7 +54,7 @@ session; returning to the planner ends the session.
 Travel starts at **12× expedition time**, with 1× and 30× options. The same clock
 drives movement, oxygen, energy, and scanning. A scan takes 45 simulated seconds
 and awards 20 points once per site. Reserves use a shared budget based on the
-shortest planned distance; terrain friction and sprinting increase energy use.
+shortest planned distance; terrain friction increases energy use.
 Scores combine completion, scans, remaining reserves, and a slope-based risk
 penalty. These are tunable gameplay assumptions, not life-support predictions.
 
