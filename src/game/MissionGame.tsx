@@ -238,17 +238,19 @@ export default function MissionGame({ data, image, start, end, routes, selected,
     <header className="mission__header">
       <div className="mission__brand">
         <span>Mars Navigator</span><small>Jezero Crater</small>
-        <dl className="mission__telemetry" aria-label="Mission telemetry">
-          <div><dt>Mission time</dt><dd>{clock(hud.elapsed)}</dd></div>
-          <div><dt>Distance walked</dt><dd>{meters(hud.distance)}</dd></div>
-        </dl>
+        <div className="mission__comms"><span>MISSION CONTROL</span><p role="status">{notice}</p></div>
       </div>
-      <div className="mission__destination"><span>DESTINATION B</span><strong>{meters(remaining)}</strong></div>
+      <div className="mission__destination">
+        <span>DESTINATION B</span><strong>{meters(remaining)}</strong>
+        <div className="mission__telemetry">
+          <span>Mission time <b>{clock(hud.elapsed)}</b></span><span aria-hidden="true">·</span>
+          <span><b>{meters(hud.distance)}</b> walked</span>
+        </div>
+      </div>
       <button type="button" className="mission__pause" onClick={pause} aria-keyshortcuts="Escape">Pause <kbd>Esc</kbd></button>
     </header>
 
     <aside className="mission__context">
-      <div className="mission__comms"><span>MISSION CONTROL</span><p role="status">{notice}</p></div>
       <div className="mission__terrain"><span>Cell {cell[0]}, {cell[1]}</span><span>Slope {Math.max(0, slope).toFixed(1)}°</span>
         <span>{hud.scans.length} / {surveys.length} surveys</span></div>
       <div className="mission__keys"><span><kbd>W A S D</kbd> Move</span>
