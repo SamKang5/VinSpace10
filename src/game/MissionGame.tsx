@@ -11,6 +11,11 @@ import './mission.css';
 type Props = { data: AppData; image: HTMLImageElement; start: GridPoint; end: GridPoint;
   routes: RouteResult[]; selected: RouteMode; onExit: () => void };
 type Phase = 'briefing' | 'playing' | 'paused' | 'results';
+const TRAVEL_PACES = [
+  { scale: 1, label: 'Real time' },
+  { scale: 12, label: 'Expedition' },
+  { scale: 30, label: 'Fast travel' },
+];
 
 function clock(seconds: number) {
   const value = Math.floor(seconds);
@@ -102,7 +107,9 @@ export default function MissionGame({ data, image, start, end, routes, selected,
   const [phase, setPhase] = useState<Phase>('briefing');
   const [guide, setGuide] = useState(selected);
   const [guidance, setGuidance] = useState(routes);
-  const [timeScale, setTimeScale] = useState(12);
+  const [paceIndex, setPaceIndex] = useState(1);
+  const pace = TRAVEL_PACES[paceIndex];
+  const cyclePace = useCallback(() => setPaceIndex(index => (index + 1) % TRAVEL_PACES.length), []);
   const [showRoutes, setShowRoutes] = useState(true);
   const [expanded, setExpanded] = useState(false);
   const [scanning, setScanning] = useState<Survey>();
@@ -186,10 +193,13 @@ export default function MissionGame({ data, image, start, end, routes, selected,
       if (event.target instanceof HTMLSelectElement || event.target instanceof HTMLInputElement) return;
       if (phase === 'playing' && event.code === 'KeyE') { event.preventDefault(); scan(); }
       if (phase === 'playing' && event.code === 'KeyM') { event.preventDefault(); setExpanded(v => !v); }
+      if (phase === 'playing' && event.code === 'KeyP' && !event.ctrlKey && !event.metaKey && !event.altKey) {
+        event.preventDefault(); cyclePace();
+      }
     };
     window.addEventListener('keydown', key);
     return () => window.removeEventListener('keydown', key);
-  }, [phase, pause, scan]);
+  }, [phase, pause, scan, cyclePace]);
 
   const restart = () => {
     releasePointer();
@@ -220,7 +230,7 @@ export default function MissionGame({ data, image, start, end, routes, selected,
     <div className="mission__world"><SceneBoundary onExit={exit} onError={() => setGraphicsError(true)}>
       <MissionScene key={run} data={data} image={image} start={start} end={end} routes={guidance}
         selected={guide} surveys={surveys} mission={mission} budget={budget} active={phase === 'playing'}
-        timeScale={timeScale} scanning={scanning} showRoutes={showRoutes} reducedMotion={reducedMotion}
+        timeScale={pace.scale} scanning={scanning} showRoutes={showRoutes} reducedMotion={reducedMotion}
         onUpdate={update} onPause={pause} onBlocked={blocked} />
     </SceneBoundary></div>
 
@@ -233,6 +243,7 @@ export default function MissionGame({ data, image, start, end, routes, selected,
         </dl>
       </div>
       <div className="mission__destination"><span>DESTINATION B</span><strong>{meters(remaining)}</strong></div>
+      <button type="button" className="mission__pause" onClick={pause} aria-keyshortcuts="Escape">Pause <kbd>Esc</kbd></button>
     </header>
 
     <aside className="mission__context">
@@ -263,9 +274,10 @@ export default function MissionGame({ data, image, start, end, routes, selected,
         <button className="mission-button mission-button--primary" disabled={phase !== 'playing'} onClick={scan}>
           {scanning ? `Cancel scan ${Math.floor(hud.scanProgress / SCAN_SECONDS * 100)}%` : 'Scan +20 points'} <kbd>E</kbd>
         </button>{scanning && <progress value={hud.scanProgress} max={SCAN_SECONDS} aria-label="Survey scan progress" />}</div>}
-      <label className="mission__pace">Travel pace <select value={timeScale} onChange={e => setTimeScale(Number(e.target.value))}>
-        <option value={1}>1× real time</option><option value={12}>12× expedition</option><option value={30}>30× fast travel</option>
-      </select></label>
+      <button type="button" className="mission__pace" onClick={cyclePace} aria-keyshortcuts="P"
+        aria-label={`Cycle travel pace. Current pace: ${pace.scale}× ${pace.label}`}>
+        <span><small>Travel pace</small><strong>{pace.scale}× {pace.label}</strong></span><kbd>P</kbd>
+      </button>
     </div>
 
     <footer className="mission__credit">NASA / USGS terrain. Artistic color. Simulated resources and survey sites. Research prototype.</footer>
