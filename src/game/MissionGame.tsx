@@ -181,8 +181,9 @@ export default function MissionGame({ data, image, start, end, routes, selected,
   }, [phase, scanning, inRange, mission]);
   useEffect(() => {
     const key = (event: KeyboardEvent) => {
-      if (event.target instanceof HTMLSelectElement || event.target instanceof HTMLInputElement || event.repeat) return;
-      if (phase === 'playing' && event.code === 'Escape') { event.preventDefault(); pause(); }
+      if (event.repeat) return;
+      if (phase === 'playing' && event.code === 'Escape') { event.preventDefault(); pause(); return; }
+      if (event.target instanceof HTMLSelectElement || event.target instanceof HTMLInputElement) return;
       if (phase === 'playing' && event.code === 'KeyE') { event.preventDefault(); scan(); }
       if (phase === 'playing' && event.code === 'KeyM') { event.preventDefault(); setExpanded(v => !v); }
     };
@@ -224,14 +225,15 @@ export default function MissionGame({ data, image, start, end, routes, selected,
     </SceneBoundary></div>
 
     <header className="mission__header">
-      <div className="mission__brand"><span>Mars Navigator</span><small>Surface expedition / Jezero Crater</small></div>
-      <div className="mission__destination"><span>DESTINATION B</span><strong>{meters(remaining)}</strong><small>direct distance</small></div>
-      <button className="mission-button" onClick={pause}>Pause <kbd>Esc</kbd></button>
+      <div className="mission__brand">
+        <span>Mars Navigator</span><small>Jezero Crater</small>
+        <dl className="mission__telemetry" aria-label="Mission telemetry">
+          <div><dt>Mission time</dt><dd>{clock(hud.elapsed)}</dd></div>
+          <div><dt>Distance walked</dt><dd>{meters(hud.distance)}</dd></div>
+        </dl>
+      </div>
+      <div className="mission__destination"><span>DESTINATION B</span><strong>{meters(remaining)}</strong></div>
     </header>
-
-    <aside className="mission__instruments" aria-label="Mission telemetry">
-      <div className="mission__telemetry"><span>Mission time <strong>{clock(hud.elapsed)}</strong></span><span>{meters(hud.distance)} walked</span></div>
-    </aside>
 
     <aside className="mission__context">
       <div className="mission__comms"><span>MISSION CONTROL</span><p role="status">{notice}</p></div>
