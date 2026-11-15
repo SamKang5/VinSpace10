@@ -4,7 +4,7 @@ import { route, type GridPoint, type RouteMode, type RouteResult } from '../lib/
 import { MODE_COLOR, MODE_LABEL } from '../lib/theme';
 import { Icon } from '../components/Icon';
 import MissionScene from './MissionScene';
-import { cellPosition, createMission, createSurveys, distance, missionBudget, missionScore,
+import { CELL_X, CELL_Z, cellPosition, createMission, createSurveys, distance, missionBudget, missionScore,
   positionCell, SCAN_RADIUS, SCAN_SECONDS, SCIENCE_POINTS_PER_SURVEY, type MissionState, type Survey } from './missionModel';
 import './mission.css';
 
@@ -35,9 +35,9 @@ class SceneBoundary extends Component<{ children: ReactNode; onExit: () => void;
   }
 }
 
-function MissionMap({ data, image, hud, routes, selected, surveys, start, end, showRoutes }: {
+function MissionMap({ data, image, hud, routes, selected, surveys, start, end, showRoutes, debrief = false }: {
   data: AppData; image: HTMLImageElement; hud: MissionState; routes: RouteResult[];
-  selected: RouteMode; surveys: Survey[]; start: GridPoint; end: GridPoint; showRoutes: boolean;
+  selected: RouteMode; surveys: Survey[]; start: GridPoint; end: GridPoint; showRoutes: boolean; debrief?: boolean;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const base = useMemo(() => {
@@ -59,24 +59,37 @@ function MissionMap({ data, image, hud, routes, selected, surveys, start, end, s
     if (!canvas || !ctx) return;
     const { width, height } = data.routing;
     const xy = ([r, c]: GridPoint) => [(c + 0.5) / width * 534, (r + 0.5) / height * 534];
+    const [px, py] = xy([hud.position.z / CELL_Z, hud.position.x / CELL_X]);
     ctx.drawImage(base, 0, 0);
     ctx.fillStyle = 'rgba(20,17,15,.18)'; ctx.fillRect(0, 0, 534, 534);
     if (showRoutes) routes.forEach(result => {
-      ctx.beginPath(); ctx.strokeStyle = MODE_COLOR[result.mode]; ctx.lineWidth = result.mode === selected ? 4 : 2;
+      ctx.beginPath(); ctx.strokeStyle = debrief ? '#fff4d8' : MODE_COLOR[result.mode];
+      ctx.lineWidth = debrief ? 6 : result.mode === selected ? 4 : 2;
       ctx.globalAlpha = result.mode === selected ? 1 : 0.55;
-      ctx.setLineDash(result.mode === 'terrain-aware' ? [9, 6] : []);
+      ctx.setLineDash(debrief || result.mode === 'terrain-aware' ? [9, 6] : []);
       result.path.forEach((cell, i) => { const [x, y] = xy(cell); if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y); });
       ctx.stroke();
     });
     ctx.globalAlpha = 1; ctx.setLineDash([]);
-    ctx.strokeStyle = '#fff4d8'; ctx.lineWidth = 2; ctx.beginPath();
+    ctx.strokeStyle = debrief ? '#61dff5' : '#fff4d8'; ctx.lineWidth = debrief ? 3.5 : 2;
+    ctx.lineJoin = 'round'; ctx.beginPath();
     hud.trail.forEach((p, i) => {
-      const [x, y] = xy([p.z / 20, p.x / (cellPosition([0, 1]).x)]);
+      const [x, y] = xy([p.z / CELL_Z, p.x / CELL_X]);
       if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
-    }); ctx.stroke();
+    });
+    if (debrief) ctx.lineTo(px, py);
+    ctx.stroke();
     surveys.forEach(s => {
-      const [x, y] = xy(s.cell); ctx.fillStyle = hud.scans.includes(s.id) ? '#7e9e7e' : '#e6ebcf';
-      ctx.fillRect(x - 3.5, y - 3.5, 7, 7);
+      const [x, y] = xy(s.cell);
+      const completed = hud.scans.includes(s.id);
+      if (!debrief) {
+        ctx.fillStyle = completed ? '#7e9e7e' : '#e6ebcf';
+        ctx.fillRect(x - 3.5, y - 3.5, 7, 7);
+      } else if (completed) {
+        ctx.fillStyle = '#b8ca9c'; ctx.beginPath(); ctx.arc(x, y, 10, 0, Math.PI * 2); ctx.fill();
+        ctx.strokeStyle = '#253323'; ctx.lineWidth = 2.5;
+        ctx.beginPath(); ctx.moveTo(x - 4, y); ctx.lineTo(x - 1, y + 3); ctx.lineTo(x + 5, y - 3); ctx.stroke();
+      }
     });
     [start, end].forEach((cell, i) => {
       const [x, y] = xy(cell); ctx.fillStyle = i ? '#f5b777' : '#b4d4df';
@@ -84,12 +97,17 @@ function MissionMap({ data, image, hud, routes, selected, surveys, start, end, s
       ctx.fillStyle = '#201b16'; ctx.font = 'bold 12px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.fillText(i ? 'B' : 'A', x, y + 0.5);
     });
-    const [px, py] = xy([hud.position.z / 20, hud.position.x / cellPosition([0, 1]).x]);
-    ctx.fillStyle = '#ffffff'; ctx.strokeStyle = '#271d18'; ctx.lineWidth = 3;
-    ctx.beginPath(); ctx.arc(px, py, 6, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-  }, [base, data, hud, routes, selected, surveys, start, end, showRoutes]);
+    if (!debrief || hud.status === 'failed') {
+      ctx.beginPath(); ctx.arc(px, py, debrief ? 12 : 6, 0, Math.PI * 2); ctx.lineWidth = 3;
+      ctx.strokeStyle = debrief ? '#ffae94' : '#271d18';
+      if (!debrief) { ctx.fillStyle = '#ffffff'; ctx.fill(); }
+      ctx.stroke();
+    }
+  }, [base, data, hud, routes, selected, surveys, start, end, showRoutes, debrief]);
   return <canvas className="mission-map__canvas" width={534} height={534}
-    ref={canvasRef} role="img" aria-label="North-up mission map. White dot: your position. White trail: your journey. Red terrain: excluded. A: start, B: destination." />;
+    ref={canvasRef} role="img" aria-label={debrief
+      ? `North-up debrief map. Dashed ivory: planned route. Cyan: actual trail. Green checks: completed surveys.${hud.status === 'failed' ? ' Coral ring: where you stopped.' : ''} A: start, B: destination.`
+      : 'North-up mission map. White dot: your position. White trail: your journey. Red terrain: excluded. A: start, B: destination.'} />;
 }
 
 function SuitMeter({ resource, value }: { resource: 'oxygen' | 'energy'; value: number }) {
@@ -107,6 +125,7 @@ export default function MissionGame({ data, image, start, end, routes, selected,
   const [phase, setPhase] = useState<Phase>('briefing');
   const [guide, setGuide] = useState(selected);
   const [guidance, setGuidance] = useState(routes);
+  const [departureRoute, setDepartureRoute] = useState(() => routes.find(route => route.mode === selected) ?? routes[0]);
   const [paceStep, setPaceStep] = useState(1);
   const paceIndex = paceStep % TRAVEL_PACES.length;
   const pace = TRAVEL_PACES[paceIndex];
@@ -156,10 +175,10 @@ export default function MissionGame({ data, image, start, end, routes, selected,
       if (record.current !== mission) {
         record.current = mission;
         setHistory(previous => [...previous.slice(-4), { distance: mission.distance, elapsed: mission.elapsed,
-          score: missionScore(mission).total, success: mission.status === 'success', guide }]);
+          score: missionScore(mission).total, success: mission.status === 'success', guide: departureRoute.mode }]);
       }
     }
-  }, [mission, guide, releasePointer, scanning]);
+  }, [mission, departureRoute, releasePointer, scanning]);
 
   useEffect(() => {
     if (pointGain === undefined) return;
@@ -174,7 +193,13 @@ export default function MissionGame({ data, image, start, end, routes, selected,
   }, []);
   useEffect(() => {
     const element = dialog.current;
-    if (phase !== 'playing' && element && !element.open) element.showModal();
+    if (phase !== 'playing' && element && !element.open) {
+      element.showModal();
+      if (phase === 'results') {
+        element.querySelector<HTMLElement>('#mission-dialog-title')?.focus({ preventScroll: true });
+        element.scrollTop = 0;
+      }
+    }
     else if (phase === 'playing' && element?.open) {
       element.close();
       document.querySelector<HTMLCanvasElement>('.mission__world canvas')?.focus();
@@ -238,7 +263,10 @@ export default function MissionGame({ data, image, start, end, routes, selected,
     }, 40);
   };
   const exit = () => { releasePointer(); onExit(); };
-  const recommended = originalShortest.distanceMeters ?? 0;
+  const briefingRoute = routes.find(route => route.mode === guide) ?? originalShortest;
+  const plannedDistance = departureRoute.distanceMeters ?? 0;
+  const distanceDifference = hud.distance - plannedDistance;
+  const completed = hud.status === 'success';
 
   if (graphicsError) return <section className="mission"><div className="mission-unavailable" role="alert">
     <h2>3D graphics unavailable</h2><p>Enable hardware acceleration in your browser and try again. Your planned route is still available.</p>
@@ -316,7 +344,7 @@ export default function MissionGame({ data, image, start, end, routes, selected,
 
     <footer className="mission__credit">NASA / USGS terrain. Artistic color. Simulated resources and survey sites. Research prototype.</footer>
 
-    <dialog className={`mission-dialog${phase === 'briefing' ? ' mission-dialog--briefing' : ''}`} ref={dialog} aria-labelledby="mission-dialog-title" onCancel={event => {
+    <dialog className={`mission-dialog mission-dialog--${phase}`} ref={dialog} aria-labelledby="mission-dialog-title" onCancel={event => {
       event.preventDefault(); if (phase === 'paused') setPhase('playing');
     }}>
       {phase === 'briefing' && <>
@@ -324,10 +352,10 @@ export default function MissionGame({ data, image, start, end, routes, selected,
         <h1 id="mission-dialog-title">Reach extraction beacon B.</h1>
         <p>Scan survey flags along the route for {SCIENCE_POINTS_PER_SURVEY} points each.</p>
         <dl className="mission-dialog__facts">
-          <div><dt>Planned distance</dt><dd>{meters(routes.find(route => route.mode === guide)?.distanceMeters ?? recommended)}</dd></div>
+          <div><dt>Planned distance</dt><dd>{meters(briefingRoute.distanceMeters ?? 0)}</dd></div>
           <div><dt>Navigation guide</dt><dd>{MODE_LABEL[guide]}</dd></div>
         </dl>
-        <div className="mission-dialog__buttons"><button className="mission-button mission-button--primary" autoFocus onClick={() => setPhase('playing')}>Begin expedition</button>
+        <div className="mission-dialog__buttons"><button className="mission-button mission-button--primary" autoFocus onClick={() => { setDepartureRoute(briefingRoute); setPhase('playing'); }}>Begin expedition</button>
           <button className="mission-text-button" onClick={exit}>Back to planner</button></div>
       </>}
       {phase === 'paused' && <>
@@ -341,19 +369,40 @@ export default function MissionGame({ data, image, start, end, routes, selected,
       </>}
       {phase === 'results' && <>
         <span className="mission-dialog__label">MISSION DEBRIEF</span>
-        <h1 id="mission-dialog-title">{hud.status === 'success' ? 'Destination reached.' : 'Expedition ended.'}</h1>
-        <p>{hud.status === 'success' ? 'You reached extraction beacon B. Review the journey you actually took.' : `${hud.failure}. Try another approach or leave more reserve for the journey.`}</p>
-        <div className="mission-score"><strong>{score.total}</strong><span>mission points</span></div>
-        <dl className="mission-dialog__facts mission-dialog__facts--results">
-          <div><dt>Distance walked</dt><dd>{meters(hud.distance)}</dd></div><div><dt>Mission time</dt><dd>{clock(hud.elapsed)}</dd></div>
-          <div><dt>Oxygen / Energy</dt><dd>{Math.ceil(hud.oxygen)}% / {Math.ceil(hud.energy)}%</dd></div>
-          <div><dt>Science scans</dt><dd>{hud.scans.length} (+{scienceScore})</dd></div>
-          <div><dt>Efficiency bonus</dt><dd>+{score.efficiency}</dd></div><div><dt>Risk penalty</dt><dd>−{score.riskPenalty}</dd></div>
-        </dl>
-        <p className="mission-dialog__note">Shortest planned: {meters(recommended)}. Actual travel: {meters(hud.distance)}. Route guidance does not constrain where you walk. Risk is a gameplay index, not a safety assessment.</p>
-        {history.length > 1 && <div className="mission-history"><h2>Previous run</h2><p>{history[history.length - 2].success ? 'Completed' : 'Incomplete'} with {MODE_LABEL[history[history.length - 2].guide].toLowerCase()} guidance: {history[history.length - 2].score} points, {meters(history[history.length - 2].distance)}, {clock(history[history.length - 2].elapsed)}.</p></div>}
-        <div className="mission-dialog__buttons"><button className="mission-button mission-button--primary" autoFocus onClick={restart}>Play again</button>
+        <h1 id="mission-dialog-title" tabIndex={-1}>{completed ? 'Destination reached.' : 'Expedition ended.'}</h1>
+        {!completed && <p className="mission-debrief__failure">{hud.failure}.</p>}
+        <div className="mission-debrief">
+          <figure className="mission-debrief__map">
+            <MissionMap data={data} image={image} hud={hud} routes={[departureRoute]} selected={departureRoute.mode}
+              surveys={surveys} start={start} end={end} showRoutes debrief />
+            <ul className="mission-debrief__legend" aria-label="Map legend">
+              <li className="mission-debrief__planned">Planned route</li>
+              <li className="mission-debrief__actual">Actual trail</li>
+              <li className="mission-debrief__survey">Survey completed</li>
+              {!completed && <li className="mission-debrief__stop">Stopped here</li>}
+            </ul>
+          </figure>
+          <dl className="mission-debrief__stats">
+            <div><dt>Planned distance</dt><dd>{meters(plannedDistance)}</dd><dd className="mission-debrief__subtext">{MODE_LABEL[departureRoute.mode]}</dd></div>
+            <div><dt>Distance walked</dt><dd>{meters(hud.distance)}</dd>
+              <dd className="mission-debrief__comparison">{completed
+                ? Math.abs(distanceDifference) < 0.5 ? 'Same distance as planned' : `${meters(Math.abs(distanceDifference))} ${distanceDifference > 0 ? 'farther' : 'shorter'} than planned`
+                : `${meters(remaining)} remaining to B`}</dd></div>
+            <div><dt>Science points</dt><dd>+{scienceScore}</dd></div>
+          </dl>
+        </div>
+        <div className="mission-dialog__buttons"><button className="mission-button mission-button--primary" onClick={restart}>Play again</button>
           <button className="mission-text-button" onClick={exit}>Back to planner</button></div>
+        <details className="mission-debrief__details">
+          <summary>Mission details</summary>
+          <dl className="mission-dialog__facts">
+            <div><dt>Mission points</dt><dd>{score.total}</dd></div><div><dt>Mission time</dt><dd>{clock(hud.elapsed)}</dd></div>
+            <div><dt>Oxygen / Energy</dt><dd>{Math.ceil(hud.oxygen)}% / {Math.ceil(hud.energy)}%</dd></div>
+            <div><dt>Science scans</dt><dd>{hud.scans.length}</dd></div>
+            <div><dt>Efficiency bonus</dt><dd>+{score.efficiency}</dd></div><div><dt>Risk penalty</dt><dd>−{score.riskPenalty}</dd></div>
+          </dl>
+          {history.length > 1 && <div className="mission-history"><h2>Previous run</h2><p>{history[history.length - 2].success ? 'Completed' : 'Incomplete'} with {MODE_LABEL[history[history.length - 2].guide].toLowerCase()} guidance: {history[history.length - 2].score} points, {meters(history[history.length - 2].distance)}, {clock(history[history.length - 2].elapsed)}.</p></div>}
+        </details>
       </>}
     </dialog>
   </section>;
