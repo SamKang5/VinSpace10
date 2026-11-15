@@ -116,10 +116,13 @@ export function advanceMission(state: MissionState, grid: RoutingGrid, destinati
 }
 
 export function missionScore(state: MissionState) {
+  const arrival = state.status === 'success' ? 100 : 0;
+  const science = state.scans.length * SCIENCE_POINTS_PER_SURVEY;
   const efficiency = Math.round((state.oxygen + state.energy) / 200 * 30);
   const riskPenalty = Math.min(30, Math.round(state.risk / Math.max(1, state.distance) * 20));
-  return { efficiency, riskPenalty, total: Math.max(0,
-    (state.status === 'success' ? 100 : 0) + state.scans.length * SCIENCE_POINTS_PER_SURVEY + efficiency - riskPenalty) };
+  const subtotal = arrival + science + efficiency - riskPenalty;
+  const floorAdjustment = Math.max(0, -subtotal);
+  return { arrival, science, efficiency, riskPenalty, floorAdjustment, total: subtotal + floorAdjustment };
 }
 
 export function createSurveys(grid: RoutingGrid, routes: RouteResult[]): Survey[] {

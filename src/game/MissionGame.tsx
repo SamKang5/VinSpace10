@@ -22,6 +22,7 @@ function clock(seconds: number) {
   return `${Math.floor(value / 60).toString().padStart(2, '0')}:${(value % 60).toString().padStart(2, '0')}`;
 }
 function meters(value: number) { return value >= 1000 ? `${(value / 1000).toFixed(2)} km` : `${Math.round(value)} m`; }
+function signedPoints(value: number) { return value > 0 ? `+${value}` : value < 0 ? `−${Math.abs(value)}` : '0'; }
 
 class SceneBoundary extends Component<{ children: ReactNode; onExit: () => void; onError: () => void }, { error: boolean }> {
   state = { error: false };
@@ -153,7 +154,6 @@ export default function MissionGame({ data, image, start, end, routes, selected,
   const cell = positionCell(hud.position);
   const slope = data.routing.slope[cell[0] * data.routing.width + cell[1]] ?? 0;
   const score = missionScore(hud);
-  const scienceScore = hud.scans.length * SCIENCE_POINTS_PER_SURVEY;
 
   const releasePointer = useCallback(() => { if (document.pointerLockElement) document.exitPointerLock(); }, []);
   const pause = useCallback(() => {
@@ -292,7 +292,7 @@ export default function MissionGame({ data, image, start, end, routes, selected,
           <span>Mission time <b>{clock(hud.elapsed)}</b></span><span aria-hidden="true">·</span>
           <span><b>{meters(hud.distance)}</b> walked</span>
         </div>
-        <div className="mission__science" role="status">Science score <b>{scienceScore}</b></div>
+        <div className="mission__science" role="status">Science score <b>{score.science}</b></div>
       </div>
       <button type="button" className="mission__pause" onClick={pause} aria-keyshortcuts="Escape">Pause <kbd>Esc</kbd></button>
     </header>
@@ -382,27 +382,36 @@ export default function MissionGame({ data, image, start, end, routes, selected,
               {!completed && <li className="mission-debrief__stop">Stopped here</li>}
             </ul>
           </figure>
-          <dl className="mission-debrief__stats">
-            <div><dt>Planned distance</dt><dd>{meters(plannedDistance)}</dd><dd className="mission-debrief__subtext">{MODE_LABEL[departureRoute.mode]}</dd></div>
-            <div><dt>Distance walked</dt><dd>{meters(hud.distance)}</dd>
-              <dd className="mission-debrief__comparison">{completed
-                ? Math.abs(distanceDifference) < 0.5 ? 'Same distance as planned' : `${meters(Math.abs(distanceDifference))} ${distanceDifference > 0 ? 'farther' : 'shorter'} than planned`
-                : `${meters(remaining)} remaining to B`}</dd></div>
-            <div><dt>Science points</dt><dd>+{scienceScore}</dd></div>
-          </dl>
+          <div className="mission-debrief__summary">
+            <section aria-labelledby="mission-points-label">
+              <h2 id="mission-points-label" className="mission-debrief__score-label">Mission points</h2>
+              <strong className="mission-debrief__total">{score.total}</strong>
+              <dl className="mission-debrief__breakdown">
+                <div><dt>Arrival bonus</dt><dd>{signedPoints(score.arrival)}</dd></div>
+                <div><dt>Science points</dt><dd>{signedPoints(score.science)}</dd></div>
+                <div><dt>Reserve bonus</dt><dd>{signedPoints(score.efficiency)}</dd></div>
+                <div><dt>Terrain risk penalty</dt><dd>{signedPoints(-score.riskPenalty)}</dd></div>
+                {score.floorAdjustment > 0 && <div><dt>Minimum score adjustment</dt><dd>{signedPoints(score.floorAdjustment)}</dd></div>}
+              </dl>
+            </section>
+            <dl className="mission-debrief__stats">
+              <div><dt>Planned distance</dt><dd>{meters(plannedDistance)}</dd><dd className="mission-debrief__subtext">{MODE_LABEL[departureRoute.mode]}</dd></div>
+              <div><dt>Distance walked</dt><dd>{meters(hud.distance)}</dd></div>
+            </dl>
+            <p className="mission-debrief__comparison">{completed
+              ? Math.abs(distanceDifference) < 0.5 ? 'Same distance as planned' : `${meters(Math.abs(distanceDifference))} ${distanceDifference > 0 ? 'farther' : 'shorter'} than planned`
+              : `${meters(remaining)} remaining to B`}</p>
+          </div>
         </div>
+        <dl className="mission-debrief__metrics">
+          <div><dt>Mission time</dt><dd>{clock(hud.elapsed)}</dd></div>
+          <div><dt>Oxygen left</dt><dd>{Math.ceil(hud.oxygen)}%</dd></div>
+          <div><dt>Energy left</dt><dd>{Math.ceil(hud.energy)}%</dd></div>
+          <div><dt>Surveys completed</dt><dd>{hud.scans.length} / {surveys.length}</dd></div>
+        </dl>
+        {history.length > 1 && <div className="mission-history"><h2>Previous run</h2><p>{history[history.length - 2].success ? 'Completed' : 'Incomplete'} with {MODE_LABEL[history[history.length - 2].guide].toLowerCase()} guidance: {history[history.length - 2].score} points, {meters(history[history.length - 2].distance)}, {clock(history[history.length - 2].elapsed)}.</p></div>}
         <div className="mission-dialog__buttons"><button className="mission-button mission-button--primary" onClick={restart}>Play again</button>
           <button className="mission-text-button" onClick={exit}>Back to planner</button></div>
-        <details className="mission-debrief__details">
-          <summary>Mission details</summary>
-          <dl className="mission-dialog__facts">
-            <div><dt>Mission points</dt><dd>{score.total}</dd></div><div><dt>Mission time</dt><dd>{clock(hud.elapsed)}</dd></div>
-            <div><dt>Oxygen / Energy</dt><dd>{Math.ceil(hud.oxygen)}% / {Math.ceil(hud.energy)}%</dd></div>
-            <div><dt>Science scans</dt><dd>{hud.scans.length}</dd></div>
-            <div><dt>Efficiency bonus</dt><dd>+{score.efficiency}</dd></div><div><dt>Risk penalty</dt><dd>−{score.riskPenalty}</dd></div>
-          </dl>
-          {history.length > 1 && <div className="mission-history"><h2>Previous run</h2><p>{history[history.length - 2].success ? 'Completed' : 'Incomplete'} with {MODE_LABEL[history[history.length - 2].guide].toLowerCase()} guidance: {history[history.length - 2].score} points, {meters(history[history.length - 2].distance)}, {clock(history[history.length - 2].elapsed)}.</p></div>}
-        </details>
       </>}
     </dialog>
   </section>;

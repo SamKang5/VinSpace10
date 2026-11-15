@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { advanceMission, CELL_X, CELL_Z, cellPosition, createMission, createSurveys, distance,
+import { advanceMission, CELL_X, CELL_Z, cellPosition, createMission, createSurveys, distance, missionScore,
   movePlayer, positionCell, SCAN_SECONDS, terrainHeight, WALK_SPEED } from '../src/game/missionModel.ts';
 import { NODATA, route, type RoutingGrid } from '../src/lib/router.ts';
 
@@ -86,4 +86,16 @@ test('simulated survey sites use traversable route cells and are spatially dedup
   const sites = createSurveys(g, [shortest, shortest]);
   assert.ok(sites.length > 0);
   for (let i = 0; i < sites.length; i++) for (let j = i + 1; j < sites.length; j++) assert.ok(distance(sites[i].position, sites[j].position) >= 100);
+});
+
+test('mission score breakdown reconciles with the total, including the zero-point minimum', () => {
+  const mission = createMission([10, 10]);
+  Object.assign(mission, { status: 'success', scans: [0, 1, 2], oxygen: 40, energy: 60, distance: 1000, risk: 750 });
+  assert.deepEqual(missionScore(mission), {
+    arrival: 100, science: 60, efficiency: 15, riskPenalty: 15, floorAdjustment: 0, total: 160,
+  });
+  Object.assign(mission, { status: 'failed', scans: [], oxygen: 0, energy: 0, risk: 2000 });
+  assert.deepEqual(missionScore(mission), {
+    arrival: 0, science: 0, efficiency: 0, riskPenalty: 30, floorAdjustment: 30, total: 0,
+  });
 });
