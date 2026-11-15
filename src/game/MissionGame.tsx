@@ -242,20 +242,17 @@ export default function MissionGame({ data, image, start, end, routes, selected,
     </aside>
 
     <aside className={`mission-map${expanded ? ' mission-map--expanded' : ''}`} aria-label="Navigation assistant">
-      <header>{expanded && <span>Navigation</span>}<button className="mission-text-button mission-map__toggle" onClick={() => setExpanded(v => !v)}
-        aria-label={expanded ? 'Minimize map' : 'Expand map'} aria-expanded={expanded} aria-keyshortcuts="M">{expanded && 'Minimize '}<kbd>M</kbd></button></header>
-      {expanded && <div className="mission-map__north">N ↑ <span>Red: excluded terrain</span></div>}
+      <header><button className="mission-text-button mission-map__toggle" onClick={() => setExpanded(v => !v)}
+        aria-label={expanded ? 'Minimize map' : 'Expand map'} aria-expanded={expanded} aria-keyshortcuts="M"><kbd>M</kbd></button>
+        <div className="mission-map__routes" role="group" aria-label="Highlighted route">{(['shortest', 'terrain-aware'] as RouteMode[]).map(mode => <button key={mode}
+          style={{ '--guide-color': MODE_COLOR[mode] } as React.CSSProperties} aria-pressed={guide === mode}
+          onClick={() => { setGuide(mode); setShowRoutes(true); }}>{mode === 'shortest' ? 'Shortest' : 'Terrain-aware'}</button>)}</div>
+      </header>
       <MissionMap data={data} image={image} hud={hud} routes={guidance} selected={guide} surveys={surveys} start={start} end={end} showRoutes={showRoutes} />
       <div className="suit-meters" role="group" aria-label="Suit resources">
         <SuitMeter resource="oxygen" value={hud.oxygen} />
         <SuitMeter resource="energy" value={hud.energy} />
       </div>
-      {expanded && <><div className="mission-map__routes">{(['shortest', 'terrain-aware'] as RouteMode[]).map(mode => <button key={mode}
-        style={{ '--guide-color': MODE_COLOR[mode] } as React.CSSProperties} aria-pressed={guide === mode}
-        onClick={() => setGuide(mode)}>{mode === 'shortest' ? 'Shortest' : 'Terrain-aware'}</button>)}</div>
-      <div className="mission-map__actions"><label><input type="checkbox" checked={showRoutes} onChange={e => setShowRoutes(e.target.checked)} /> Show guidance</label>
-        <button className="mission-text-button" disabled={recalculating || phase !== 'playing'} onClick={recalculate}>{recalculating ? 'Calculating…' : 'Recalculate'}</button></div>
-      <small>White dot: you. White line: your actual journey.</small></>}
     </aside>
 
     <div className="mission__action">
@@ -290,6 +287,8 @@ export default function MissionGame({ data, image, start, end, routes, selected,
       {phase === 'paused' && <>
         <span className="mission-dialog__label">EXPEDITION PAUSED</span><h1 id="mission-dialog-title">Take your bearings.</h1>
         <p>Your oxygen, energy, and mission clock are paused. Resume when you are ready.</p>
+        <div className="mission-dialog__navigation"><label><input type="checkbox" checked={showRoutes} onChange={e => setShowRoutes(e.target.checked)} /> Show guidance</label>
+          <button className="mission-text-button" disabled={recalculating} onClick={recalculate}>{recalculating ? 'Calculating…' : 'Recalculate route'}</button></div>
         <div className="mission-dialog__buttons"><button className="mission-button mission-button--primary" autoFocus onClick={() => setPhase('playing')}>Resume expedition</button>
           <button className="mission-button" onClick={restart}>Restart mission</button><button className="mission-text-button" onClick={exit}>Back to planner</button></div>
       </>}
