@@ -4,6 +4,8 @@ const paths = {
   minus: 'M5 12h14',
   fill: 'M9 4H4v5m11-5h5v5M4 15v5h5m11-5v5h-5',
   close: 'm6 6 12 12M18 6 6 18',
+  oxygen: 'M10 5V3h4v2m-2 0v2m-4 7h8m-8 5h8M8 11a4 4 0 0 1 8 0v9a1 1 0 0 1-1 1H9a1 1 0 0 1-1-1z',
+  energy: 'm13 2-8 12h6l-1 8 9-12h-6z',
 } as const;
 
 export function Icon({ name }: { name: keyof typeof paths }) {

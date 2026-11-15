@@ -31,9 +31,6 @@ svg { flex-shrink: 0; vertical-align: middle; }
 .warning { color: var(--warn) !important; }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
 
-.start-mission { background: #efd5af; border-color: #efd5af; color: #271d16; font-weight: 650; white-space: nowrap; }
-.start-mission:hover { background: #ffe7c4; }
-.start-mission:disabled { opacity: .45; cursor: not-allowed; }
 .mission-loading { position: fixed; inset: 0; z-index: 4; display: grid; place-content: center; gap: 12px; padding: 24px; background: #211b16; color: #f6efe5; }
 .mission-loading p { color: #c8bbac; font-size: 14px; }
 
@@ -90,6 +87,9 @@ svg { flex-shrink: 0; vertical-align: middle; }
 }
 .icon-btn { width: 44px; padding: 0; }
 .icon-btn svg { width: 20px; height: 20px; }
+.btn.start-mission { background: #efd5af; border-color: #efd5af; color: #271d16; font-weight: 650; white-space: nowrap; }
+.btn.start-mission:hover:not(:disabled) { background: #ffe7c4; }
+.btn.start-mission:disabled { background: #3d332a; border-color: #756450; color: #cdbba6; cursor: not-allowed; }
 .text-action, .route-select {
   display: inline-flex;
   align-items: center;
@@ -351,6 +351,7 @@ summary::-webkit-details-marker { display: none; }
   .app__brand h1 { font-size: 17px; }
   .app__brand p { font-size: 12px; }
   .app__tools { gap: 4px; }
+  .btn.start-mission { padding-inline: 8px; font-size: 12px; }
   .route-dock { grid-template-columns: minmax(0, 1fr); gap: 6px; padding: 8px 12px; }
   .comparison { grid-template-columns: minmax(0, 1fr); gap: 0; border-left: 0; padding: 0; border-top: 1px solid var(--line); }
   .comparison__more { grid-row: 1; justify-self: end; }

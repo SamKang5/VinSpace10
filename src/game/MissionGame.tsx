@@ -2,6 +2,7 @@ import { Component, useCallback, useEffect, useMemo, useRef, useState, type Reac
 import type { AppData } from '../lib/data';
 import { route, type GridPoint, type RouteMode, type RouteResult } from '../lib/router';
 import { MODE_COLOR, MODE_LABEL } from '../lib/theme';
+import { Icon } from '../components/Icon';
 import MissionScene from './MissionScene';
 import { cellPosition, createMission, createSurveys, distance, missionBudget, missionScore,
   positionCell, SCAN_RADIUS, SCAN_SECONDS, type MissionState, type Survey } from './missionModel';
@@ -29,9 +30,9 @@ class SceneBoundary extends Component<{ children: ReactNode; onExit: () => void;
   }
 }
 
-function MissionMap({ data, image, hud, routes, selected, surveys, start, end, expanded, showRoutes }: {
+function MissionMap({ data, image, hud, routes, selected, surveys, start, end, showRoutes }: {
   data: AppData; image: HTMLImageElement; hud: MissionState; routes: RouteResult[];
-  selected: RouteMode; surveys: Survey[]; start: GridPoint; end: GridPoint; expanded: boolean; showRoutes: boolean;
+  selected: RouteMode; surveys: Survey[]; start: GridPoint; end: GridPoint; showRoutes: boolean;
 }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const base = useMemo(() => {
@@ -82,8 +83,16 @@ function MissionMap({ data, image, hud, routes, selected, surveys, start, end, e
     ctx.fillStyle = '#ffffff'; ctx.strokeStyle = '#271d18'; ctx.lineWidth = 3;
     ctx.beginPath(); ctx.arc(px, py, 6, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
   }, [base, data, hud, routes, selected, surveys, start, end, showRoutes]);
-  return <canvas className={expanded ? 'mission-map__canvas is-expanded' : 'mission-map__canvas'} width={534} height={534}
+  return <canvas className="mission-map__canvas" width={534} height={534}
     ref={canvasRef} role="img" aria-label="North-up mission map. White dot: your position. White trail: your journey. Red terrain: excluded. A: start, B: destination." />;
+}
+
+function SuitMeter({ resource, value }: { resource: 'oxygen' | 'energy'; value: number }) {
+  return <div className={`suit-meter suit-meter--${resource}`} data-low={value < 25}>
+    <Icon name={resource} />
+    <meter min={0} max={100} value={value} aria-label={`${resource === 'oxygen' ? 'Oxygen' : 'Energy'} remaining`} />
+    <span aria-hidden="true">{Math.ceil(value)}%</span>
+  </div>;
 }
 
 export default function MissionGame({ data, image, start, end, routes, selected, onExit }: Props) {
@@ -221,11 +230,8 @@ export default function MissionGame({ data, image, start, end, routes, selected,
     </header>
 
     <aside className="mission__instruments" aria-label="Suit resources">
-      {[['Oxygen', hud.oxygen], ['Energy', hud.energy]].map(([label, value]) => <div className="suit-reading" key={label} data-low={Number(value) < 25}>
-        <span>{label}</span><strong>{Math.ceil(Number(value))}<small>%</small></strong>
-        <meter min={0} max={100} low={25} value={Number(value)} aria-label={`${label} remaining`} />
-      </div>)}
-      <div className="suit-reading"><span>Mission time</span><strong>{clock(hud.elapsed)}</strong><small>{meters(hud.distance)} walked</small></div>
+      <div className="suit-meters"><SuitMeter resource="oxygen" value={hud.oxygen} /><SuitMeter resource="energy" value={hud.energy} /></div>
+      <div className="mission__telemetry"><span>Mission time <strong>{clock(hud.elapsed)}</strong></span><span>{meters(hud.distance)} walked</span></div>
     </aside>
 
     <aside className="mission__context">
@@ -237,15 +243,16 @@ export default function MissionGame({ data, image, start, end, routes, selected,
     </aside>
 
     <aside className={`mission-map${expanded ? ' mission-map--expanded' : ''}`} aria-label="Navigation assistant">
-      <header><span>Navigation</span><button className="mission-text-button" onClick={() => setExpanded(v => !v)} aria-expanded={expanded}>{expanded ? 'Minimize' : 'Expand'} <kbd>M</kbd></button></header>
-      <div className="mission-map__north">N ↑ <span>Red: excluded terrain</span></div>
-      <MissionMap data={data} image={image} hud={hud} routes={guidance} selected={guide} surveys={surveys} start={start} end={end} expanded={expanded} showRoutes={showRoutes} />
-      <div className="mission-map__routes">{(['shortest', 'terrain-aware'] as RouteMode[]).map(mode => <button key={mode}
+      <header>{expanded && <span>Navigation</span>}<button className="mission-text-button mission-map__toggle" onClick={() => setExpanded(v => !v)}
+        aria-label={expanded ? 'Minimize map' : 'Expand map'} aria-expanded={expanded} aria-keyshortcuts="M">{expanded && 'Minimize '}<kbd>M</kbd></button></header>
+      {expanded && <div className="mission-map__north">N ↑ <span>Red: excluded terrain</span></div>}
+      <MissionMap data={data} image={image} hud={hud} routes={guidance} selected={guide} surveys={surveys} start={start} end={end} showRoutes={showRoutes} />
+      {expanded && <><div className="mission-map__routes">{(['shortest', 'terrain-aware'] as RouteMode[]).map(mode => <button key={mode}
         style={{ '--guide-color': MODE_COLOR[mode] } as React.CSSProperties} aria-pressed={guide === mode}
         onClick={() => setGuide(mode)}>{mode === 'shortest' ? 'Shortest' : 'Terrain-aware'}</button>)}</div>
       <div className="mission-map__actions"><label><input type="checkbox" checked={showRoutes} onChange={e => setShowRoutes(e.target.checked)} /> Show guidance</label>
         <button className="mission-text-button" disabled={recalculating || phase !== 'playing'} onClick={recalculate}>{recalculating ? 'Calculating…' : 'Recalculate'}</button></div>
-      <small>White dot: you. White line: your actual journey.</small>
+      <small>White dot: you. White line: your actual journey.</small></>}
     </aside>
 
     <div className="mission__action">
